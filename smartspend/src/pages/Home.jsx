@@ -817,9 +817,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6">
-          <NotificationCard compact />
-        </div>
+        {!isSubscribed() && (
+          <div className="mt-6">
+            <NotificationCard compact />
+          </div>
+        )}
 
         {amount && (
           <button

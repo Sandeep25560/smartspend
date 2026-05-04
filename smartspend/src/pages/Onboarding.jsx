@@ -4,26 +4,31 @@ import { updateProfile } from '../services/api'
 import { useUser } from '../context/UserContext'
 import DatePicker from '../components/DatePicker'
 import { daysUntilPayday } from '../utils/decisionHelpers'
-import { enablePush, isPushSupported } from '../services/pushNotifications'
+import { enablePush, isPushSupported, isIOS, isStandalone } from '../services/pushNotifications'
 
-const FREQUENCIES = ['Weekly', 'Biweekly', 'Monthly', 'Irregular']
+const FREQUENCIES = [
+  { id: 'Weekly',    label: 'Weekly',    sub: 'Every week' },
+  { id: 'Biweekly', label: 'Biweekly',  sub: 'Every two weeks' },
+  { id: 'Monthly',  label: 'Monthly',   sub: 'Once a month' },
+  { id: 'Irregular', label: 'Irregular', sub: 'No fixed schedule' },
+]
 
 export default function Onboarding() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
   const { setUser } = useUser()
-  const [step, setStep] = useState(1)
+  const [step, setStep]   = useState(1)
   const [balance, setBalance] = useState('')
-  const [payday, setPayday] = useState('')
-  const [frequency, setFreq] = useState('Monthly')
+  const [payday,  setPayday]  = useState('')
+  const [frequency, setFreq]  = useState('Monthly')
   const [loading, setLoading] = useState(false)
   const [notificationLoading, setNotificationLoading] = useState(false)
-  const [notificationError, setNotificationError] = useState('')
+  const [notificationError,   setNotificationError]   = useState('')
   const [error, setError] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => { inputRef.current?.focus() }, [step])
 
-  const minDate = new Date()
+  const minDate    = new Date()
   minDate.setDate(minDate.getDate() + 1)
   const minDateStr = minDate.toISOString().split('T')[0]
 
@@ -32,13 +37,10 @@ export default function Onboarding() {
     setError('')
     try {
       const parsedBalance = parseFloat(balance)
-      if (!Number.isFinite(parsedBalance) || parsedBalance < 0) {
+      if (!Number.isFinite(parsedBalance) || parsedBalance < 0)
         throw new Error('Balance must be $0 or more.')
-      }
-
-      if (!payday || daysUntilPayday(payday) <= 0) {
+      if (!payday || daysUntilPayday(payday) <= 0)
         throw new Error('Choose a future payday.')
-      }
 
       const user = await updateProfile({
         balance: parsedBalance,
@@ -57,12 +59,14 @@ export default function Onboarding() {
 
   async function enableReminders() {
     setNotificationError('')
-
     if (!isPushSupported()) {
-      setNotificationError('Reminders are not available in this browser.')
+      if (isIOS() && !isStandalone()) {
+        setNotificationError('On iPhone, add this app to your Home Screen first, then enable reminders.')
+      } else {
+        setNotificationError('Reminders are not available in this browser.')
+      }
       return
     }
-
     setNotificationLoading(true)
     try {
       await enablePush()
@@ -79,28 +83,60 @@ export default function Onboarding() {
     }
   }
 
-  function skipReminders() {
-    navigate('/home', { replace: true })
-  }
+  const stepMeta = [
+    { n: 1, label: 'Balance' },
+    { n: 2, label: 'Payday' },
+    { n: 3, label: 'Pay cycle' },
+    { n: 4, label: 'Reminders' },
+  ]
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col px-6 py-12">
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        <div className="flex gap-2 mb-10">
-          {[1, 2, 3, 4].map(n => (
-            <div key={n} className={`h-1 flex-1 rounded-full transition-all duration-500 ${n <= step ? 'bg-emerald-500' : 'bg-white/10'}`} />
+    <div className="relative min-h-screen flex flex-col overflow-hidden" style={{ background: '#0b0f1a' }}>
+      {/* Ambient glow */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-500/[0.06] blur-3xl" />
+      </div>
+
+      <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col px-6 pt-12 pb-10">
+
+        {/* Progress */}
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-bold tracking-[0.22em] uppercase text-emerald-400">SmartSpend</span>
+          <span className="text-xs font-semibold text-white/30">{step} of 4</span>
+        </div>
+        <div className="mb-10 flex gap-1.5">
+          {stepMeta.map(({ n }) => (
+            <div
+              key={n}
+              className="h-1 flex-1 rounded-full transition-all duration-500"
+              style={{
+                background: n < step
+                  ? '#34d399'
+                  : n === step
+                    ? 'linear-gradient(to right, #34d399, #10b981)'
+                    : 'rgba(255,255,255,0.08)',
+              }}
+            />
           ))}
         </div>
 
         <div className="flex-1 flex flex-col">
+
+          {/* Step 1 — Balance */}
           {step === 1 && (
-            <div className="animate-fadeUp flex-1 flex flex-col">
+            <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
-                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-4">Step 1 of 4</p>
-                <h2 className="text-3xl font-black text-white mb-2 leading-tight">How much money<br />do you have right now?</h2>
-                <p className="text-white/60 mb-10">The money you can use right now.</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+                  Step 1 — Balance
+                </p>
+                <h2 className="mb-2 text-[28px] font-black leading-tight tracking-tight text-white">
+                  How much do you<br />have right now?
+                </h2>
+                <p className="mb-10 text-[15px] font-medium text-white/45">
+                  The money available to spend until payday.
+                </p>
                 <div className="relative">
-                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-4xl font-light text-white/60 pointer-events-none">$</span>
+                  <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-4xl font-light text-white/40">$</span>
                   <input
                     ref={inputRef}
                     type="number"
@@ -109,112 +145,176 @@ export default function Onboarding() {
                     onChange={e => setBalance(e.target.value)}
                     placeholder="500"
                     onKeyDown={e => e.key === 'Enter' && balance && setStep(2)}
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-12 py-5 text-center text-5xl font-bold text-white outline-none transition-all duration-200 placeholder:text-white/25 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/40"
+                    className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] px-12 py-5 text-center text-5xl font-black text-white outline-none transition-all duration-200 placeholder:text-white/20 focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
                   />
                 </div>
               </div>
-              <button onClick={() => balance && setStep(2)} disabled={!balance}
-                className="w-full rounded-2xl bg-emerald-500 py-4 font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-30 disabled:hover:scale-100">
+              <button
+                onClick={() => balance && setStep(2)}
+                disabled={!balance}
+                className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-25 disabled:hover:scale-100"
+              >
                 Continue
               </button>
             </div>
           )}
 
+          {/* Step 2 — Payday */}
           {step === 2 && (
-            <div className="animate-fadeUp flex-1 flex flex-col">
+            <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
-                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-4">Step 2 of 4</p>
-                <h2 className="text-3xl font-black text-white mb-2 leading-tight">When is your next<br />money coming in?</h2>
-                <p className="text-white/60 mb-6">So your money lasts until then.</p>
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+                  Step 2 — Payday
+                </p>
+                <h2 className="mb-2 text-[28px] font-black leading-tight tracking-tight text-white">
+                  When does your<br />next pay land?
+                </h2>
+                <p className="mb-8 text-[15px] font-medium text-white/45">
+                  Every answer is calibrated to this date.
+                </p>
                 <DatePicker value={payday} onChange={setPayday} minDate={minDateStr} />
               </div>
-              <div className="space-y-3">
-                <button onClick={() => payday && setStep(3)} disabled={!payday}
-                  className="w-full rounded-2xl bg-emerald-500 py-4 font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-30 disabled:hover:scale-100">
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => payday && setStep(3)}
+                  disabled={!payday}
+                  className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-25 disabled:hover:scale-100"
+                >
                   Continue
                 </button>
-                <button onClick={() => setStep(1)} className="w-full py-2 text-sm font-medium text-white/60 transition-all duration-200 hover:text-white/80 active:scale-[0.98]">Back</button>
+                <button
+                  onClick={() => setStep(1)}
+                  className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60 active:scale-[0.98]"
+                >
+                  Back
+                </button>
               </div>
             </div>
           )}
 
+          {/* Step 3 — Frequency */}
           {step === 3 && (
-            <div className="animate-fadeUp flex-1 flex flex-col">
+            <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
-                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-4">Step 3 of 4</p>
-                <h2 className="text-3xl font-black text-white mb-2 leading-tight">How often do you<br />usually get paid?</h2>
-                <p className="text-white/60 mb-10">So each answer feels right.</p>
-                <div className="space-y-3">
-                  {FREQUENCIES.map(f => (
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+                  Step 3 — Pay cycle
+                </p>
+                <h2 className="mb-2 text-[28px] font-black leading-tight tracking-tight text-white">
+                  How often do<br />you get paid?
+                </h2>
+                <p className="mb-8 text-[15px] font-medium text-white/45">
+                  Shapes how tight each answer feels.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {FREQUENCIES.map(({ id, label, sub }) => (
                     <button
-                      key={f}
-                      onClick={() => setFreq(f)}
-                      className={`w-full rounded-2xl px-5 py-4 text-left text-base font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-                        frequency === f
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10'
+                      key={id}
+                      onClick={() => setFreq(id)}
+                      className={`flex items-center justify-between rounded-2xl px-5 py-4 text-left transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] ${
+                        frequency === id
+                          ? 'bg-emerald-500 shadow-[0_8px_24px_rgba(16,185,129,0.18)]'
+                          : 'border border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.07]'
                       }`}
                     >
-                      {f}
+                      <span className={`text-[15px] font-black ${frequency === id ? 'text-white' : 'text-white/75'}`}>
+                        {label}
+                      </span>
+                      <span className={`text-xs font-semibold ${frequency === id ? 'text-white/70' : 'text-white/30'}`}>
+                        {sub}
+                      </span>
                     </button>
                   ))}
                 </div>
-                {error && <div className="mt-4 text-rose-300 text-sm font-medium">{error}</div>}
+                {error && (
+                  <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-4 py-3 text-sm font-semibold text-rose-300">
+                    {error}
+                  </div>
+                )}
               </div>
-              <div className="space-y-3 mt-6">
-                <button onClick={finish} disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100">
-                  {loading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Let's go"}
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  onClick={finish}
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  {loading
+                    ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    : "Let's go"}
                 </button>
-                <button onClick={() => setStep(2)} className="w-full py-2 text-sm font-medium text-white/60 transition-all duration-200 hover:text-white/80 active:scale-[0.98]">Back</button>
+                <button
+                  onClick={() => setStep(2)}
+                  className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60 active:scale-[0.98]"
+                >
+                  Back
+                </button>
               </div>
             </div>
           )}
 
+          {/* Step 4 — Notifications */}
           {step === 4 && (
-            <div className="animate-fadeUp flex-1 flex flex-col">
+            <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
-                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-4">Optional</p>
-                <h2 className="text-3xl font-black text-white mb-2 leading-tight">Get a daily<br />check-in?</h2>
-                <p className="text-white/60 mb-8">
-                  Every morning, we'll tell you what feels safe today.
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
+                  Almost done
+                </p>
+                <h2 className="mb-2 text-[28px] font-black leading-tight tracking-tight text-white">
+                  Get a morning<br />check-in?
+                </h2>
+                <p className="mb-8 text-[15px] font-medium text-white/45">
+                  Each morning we'll tell you what feels safe today.
                 </p>
 
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-5 shadow-[0_14px_44px_rgba(0,0,0,0.22)]">
-                  <div className="flex items-center gap-3">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.32)]" />
+                {/* Preview card */}
+                <div className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-5 py-5">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]" />
                     <div>
-                      <p className="text-sm font-bold text-white/90">Daily reminders</p>
-                      <p className="mt-1 text-xs font-medium text-white/60">8:00 AM morning check-in.</p>
+                      <p className="text-sm font-bold text-white/90">Daily reminder</p>
+                      <p className="mt-0.5 text-xs font-medium text-white/50">
+                        "You can spend $45 today" — 8:00 AM
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-start gap-3">
+                    <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)]" />
+                    <div>
+                      <p className="text-sm font-bold text-white/90">Evening nudge</p>
+                      <p className="mt-0.5 text-xs font-medium text-white/50">
+                        "Don't lose your budget tonight" — 7:00 PM
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {notificationError && (
-                  <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100/80">
+                  <div className="mt-4 animate-panelIn rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-sm font-semibold text-amber-100/80">
                     {notificationError}
                   </div>
                 )}
               </div>
 
-              <div className="space-y-3 mt-6">
+              <div className="mt-6 flex flex-col gap-2">
                 <button
                   onClick={enableReminders}
                   disabled={notificationLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
                 >
-                  {notificationLoading ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Enable reminders'}
+                  {notificationLoading
+                    ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    : 'Enable reminders'}
                 </button>
                 <button
-                  onClick={skipReminders}
+                  onClick={() => navigate('/home', { replace: true })}
                   disabled={notificationLoading}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 text-sm font-bold text-white/70 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 hover:text-white/90 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
+                  className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/55 active:scale-[0.98] disabled:opacity-40"
                 >
-                  Not now
+                  Skip for now
                 </button>
               </div>
             </div>
           )}
+
         </div>
       </div>
     </div>

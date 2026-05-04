@@ -1,6 +1,33 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 
+const STATUS_CARDS = [
+  {
+    dot: '#34d399',
+    border: 'border-emerald-500/20',
+    bg: 'bg-emerald-500/[0.07]',
+    label: "You're good",
+    sub: 'Looks good. Go for it.',
+    delay: '60ms',
+  },
+  {
+    dot: '#fbbf24',
+    border: 'border-amber-500/20',
+    bg: 'bg-amber-500/[0.07]',
+    label: 'Go slow',
+    sub: 'Not the best move right now.',
+    delay: '140ms',
+  },
+  {
+    dot: '#f87171',
+    border: 'border-rose-500/20',
+    bg: 'bg-rose-500/[0.07]',
+    label: 'Skip this',
+    sub: 'You may run out early.',
+    delay: '220ms',
+  },
+]
+
 export default function Landing() {
   const navigate = useNavigate()
 
@@ -9,57 +36,72 @@ export default function Landing() {
   }, [navigate])
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 -right-32 w-80 h-80 bg-amber-500/[0.08] rounded-full blur-3xl" />
+    <div className="relative min-h-screen flex flex-col overflow-hidden" style={{ background: '#0b0f1a' }}>
+      {/* Ambient glows */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-emerald-500/[0.08] blur-3xl" />
+        <div className="absolute top-1/2 -right-32 h-80 w-80 rounded-full bg-amber-500/[0.05] blur-3xl" />
       </div>
 
-      <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col px-6 pt-16 pb-10">
+      <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col px-6 pt-12 pb-10">
+
+        {/* Wordmark */}
         <div className="mb-16">
-          <span className="text-xs font-bold tracking-[0.2em] text-emerald-400 uppercase">SmartSpend</span>
+          <span className="text-xs font-bold tracking-[0.22em] uppercase text-emerald-400">SmartSpend</span>
         </div>
 
         <div className="flex-1 flex flex-col justify-center">
-          <h1 className="text-5xl font-black text-white leading-[1.1] tracking-tight mb-5">
-            Will you run out<br />
-            <span className="text-emerald-300">before payday?</span>
-          </h1>
-          <p className="text-white/60 text-lg leading-relaxed mb-12">
-            Know in seconds before you spend. No budgets, no stress. Just a clear answer.
-          </p>
 
-          <div className="space-y-2 mb-12">
-            {[
-              { status: 'bg-emerald-500/[0.15] border-emerald-500/20 text-emerald-300', dot: '#34d399', label: "You're good", sub: 'Looks good. Go for it.' },
-              { status: 'bg-amber-500/[0.15] border-amber-500/20 text-amber-300', dot: '#fbbf24', label: 'Go slow', sub: 'Not the best move right now.' },
-              { status: 'bg-rose-500/[0.15] border-rose-500/20 text-rose-300', dot: '#f87171', label: 'Skip this', sub: 'You may run out early.' },
-            ].map(({ status, dot, label, sub }) => (
-              <div key={label} className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${status}`}>
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dot }} />
+          {/* Hero */}
+          <div className="animate-fadeIn mb-10">
+            <h1 className="text-[44px] font-black leading-[1.08] tracking-tight text-white">
+              Will you run out<br />
+              <span className="text-emerald-300">before payday?</span>
+            </h1>
+            <p className="mt-4 text-[16px] font-medium leading-relaxed text-white/50">
+              Know in seconds. No budgets, no stress.<br />
+              Just a clear answer.
+            </p>
+          </div>
+
+          {/* Status preview cards — staggered */}
+          <div className="flex flex-col gap-2">
+            {STATUS_CARDS.map(({ dot, border, bg, label, sub, delay }) => (
+              <div
+                key={label}
+                className={`animate-fadeUp flex items-center gap-3.5 rounded-2xl border px-4 py-3.5 ${border} ${bg}`}
+                style={{ animationDelay: delay, animationFillMode: 'both' }}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: dot, boxShadow: `0 0 8px ${dot}66` }}
+                />
                 <div>
-                  <div className="text-sm font-bold">{label}</div>
-                  <div className="text-xs text-white/60">{sub}</div>
+                  <div className="text-sm font-black text-white/90">{label}</div>
+                  <div className="text-xs font-medium text-white/50">{sub}</div>
                 </div>
               </div>
             ))}
           </div>
+
         </div>
 
-        <div className="space-y-3">
+        {/* CTA buttons */}
+        <div className="mt-12 flex flex-col gap-3">
           <button
             onClick={() => navigate('/signup')}
-            className="w-full rounded-2xl bg-emerald-500 py-4 text-base font-bold text-white shadow-[0_12px_30px_rgba(16,185,129,0.18)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98]"
+            className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.18)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98]"
           >
-            Get started
+            Get started — it's free
           </button>
           <button
             onClick={() => navigate('/login')}
-            className="w-full rounded-xl border border-white/[0.15] bg-white/5 py-3 text-base font-semibold text-white/80 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98]"
+            className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.04] py-3.5 text-[15px] font-semibold text-white/65 transition-all duration-200 hover:scale-[1.02] hover:bg-white/[0.07] hover:text-white/85 active:scale-[0.98]"
           >
-            I already have an account &rarr;
+            I already have an account
           </button>
         </div>
+
       </div>
     </div>
   )

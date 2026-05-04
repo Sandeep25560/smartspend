@@ -7,7 +7,12 @@ import { useUser } from '../context/UserContext'
 import { ui } from '../utils/designSystem'
 import { daysUntilPayday } from '../utils/decisionHelpers'
 
-const FREQUENCIES = ['Weekly', 'Biweekly', 'Monthly', 'Irregular']
+const FREQUENCIES = [
+  { id: 'Weekly',    label: 'Weekly',    sub: 'Every week' },
+  { id: 'Biweekly', label: 'Biweekly',  sub: 'Every 2 weeks' },
+  { id: 'Monthly',  label: 'Monthly',   sub: 'Once a month' },
+  { id: 'Irregular', label: 'Irregular', sub: 'No fixed date' },
+]
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -33,18 +38,13 @@ export default function Settings() {
           navigate('/onboarding', { replace: true })
           return
         }
-
         setBalance(u.balance?.toString() ?? '')
         setPayday(u.nextPayday ? u.nextPayday.split('T')[0] : '')
         setFreq(u.payFrequency ?? 'Monthly')
       })
-      .catch((error) => {
-        if (!localStorage.getItem('ss_token')) {
-          navigate('/login', { replace: true })
-          return
-        }
-
-        setError(error.message || 'Could not load your setup.')
+      .catch((err) => {
+        if (!localStorage.getItem('ss_token')) { navigate('/login', { replace: true }); return }
+        setError(err.message || 'Could not load your setup.')
       })
       .finally(() => setLoading(false))
   }, [navigate, refresh])
@@ -57,13 +57,10 @@ export default function Settings() {
 
     try {
       const parsedBalance = parseFloat(balance)
-      if (!Number.isFinite(parsedBalance) || parsedBalance < 0) {
+      if (!Number.isFinite(parsedBalance) || parsedBalance < 0)
         throw new Error('Balance must be $0 or more.')
-      }
-
-      if (!payday || daysUntilPayday(payday) <= 0) {
+      if (!payday || daysUntilPayday(payday) <= 0)
         throw new Error('Choose a future payday.')
-      }
 
       const u = await updateProfile({
         balance: parsedBalance,
@@ -115,6 +112,7 @@ export default function Settings() {
   return (
     <AppShell>
       <div className={ui.stack}>
+
         <header className="mb-2">
           <div className={ui.eyebrow}>Settings</div>
           <h1 className={`${ui.title} mt-3`}>Keep it true.</h1>
@@ -129,94 +127,121 @@ export default function Settings() {
           </div>
         )}
 
-        <section className={`${ui.card} ${ui.cardPad}`}>
-          <div className="truncate text-base font-bold text-white/90">
-            {user?.email}
-          </div>
-          <div className="mt-1 text-xs font-medium text-white/60">
-            Signed in here.
-          </div>
-        </section>
-
-        <section className={`${ui.card} ${ui.cardPad}`}>
-          <div className="text-sm font-bold text-white/70">Your setup</div>
-
-          <form onSubmit={save} className="mt-5 flex flex-col gap-4">
-            <label className="block">
-              <span className="text-sm font-semibold text-white/70">Balance</span>
-              <div className="relative mt-2">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/50">$</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={balance}
-                  onChange={e => setBalance(e.target.value)}
-                  required
-                  className={`${ui.input} pl-8`}
-                />
+        {/* Account */}
+        <section className="flex flex-col gap-2">
+          <div className={ui.eyebrow}>Account</div>
+          <div className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/[0.12] text-sm font-black text-emerald-400">
+                {(user?.email?.[0] ?? '?').toUpperCase()}
               </div>
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-semibold text-white/70">Payday</span>
-              <input
-                type="date"
-                value={payday}
-                min={minDateStr}
-                onChange={e => setPayday(e.target.value)}
-                required
-                className={`${ui.input} mt-2`}
-              />
-            </label>
-
-            <div>
-              <div className="text-sm font-semibold text-white/70">Pay cycle</div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {FREQUENCIES.map(f => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFreq(f)}
-                    className={`rounded-2xl px-3 py-3 text-sm font-black transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-                      frequency === f
-                        ? 'bg-emerald-500 text-white'
-                        : 'border border-white/10 bg-white/[0.045] text-white/70 hover:bg-white/[0.07]'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-white/90">{user?.email}</div>
+                <div className="mt-0.5 text-[11px] font-medium text-white/40">Active account</div>
               </div>
             </div>
-
-            {error && (
-              <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200/80">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={saving}
-              className={ui.buttonPrimary}
-            >
-              {saving ? 'Saving...' : saved ? 'Saved' : 'Save setup'}
-            </button>
-          </form>
+          </div>
         </section>
 
-        <section className="flex flex-col gap-3">
+        {/* Your setup */}
+        <section className="flex flex-col gap-2">
+          <div className={ui.eyebrow}>Your setup</div>
+          <div className={`${ui.card} ${ui.cardPad}`}>
+            <form onSubmit={save} className="flex flex-col gap-5">
+
+              <label className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-white/40">Balance</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/40">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={balance}
+                    onChange={e => setBalance(e.target.value)}
+                    required
+                    placeholder="0"
+                    className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] pl-8 pr-4 py-4 text-[15px] font-semibold text-white outline-none transition-all duration-200 placeholder:text-white/25 focus:border-emerald-400/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
+                  />
+                </div>
+              </label>
+
+              <label className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-white/40">Next payday</span>
+                <input
+                  type="date"
+                  value={payday}
+                  min={minDateStr}
+                  onChange={e => setPayday(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] px-4 py-4 text-[15px] font-semibold text-white outline-none transition-all duration-200 focus:border-emerald-400/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
+                />
+              </label>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-white/40">Pay cycle</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {FREQUENCIES.map(({ id, label, sub }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setFreq(id)}
+                      className={`flex flex-col rounded-2xl px-4 py-3.5 text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                        frequency === id
+                          ? 'bg-emerald-500 shadow-[0_8px_24px_rgba(16,185,129,0.18)]'
+                          : 'border border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.07]'
+                      }`}
+                    >
+                      <span className={`text-sm font-black ${frequency === id ? 'text-white' : 'text-white/75'}`}>
+                        {label}
+                      </span>
+                      <span className={`mt-0.5 text-[11px] font-semibold ${frequency === id ? 'text-white/65' : 'text-white/30'}`}>
+                        {sub}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.08] px-4 py-3 text-sm font-semibold text-rose-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {saving
+                  ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  : saved
+                    ? '✓ Saved'
+                    : 'Save changes'}
+              </button>
+
+            </form>
+          </div>
+        </section>
+
+        {/* Notifications */}
+        <section className="flex flex-col gap-2">
           <div className={ui.eyebrow}>Notifications</div>
           <NotificationCard />
         </section>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3.5 text-sm font-bold text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-red-500/20 hover:text-red-300 active:scale-[0.98]"
-        >
-          Sign out
-        </button>
+        {/* Sign out */}
+        <section className="flex flex-col gap-2">
+          <div className={ui.eyebrow}>Danger zone</div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.07] px-4 py-4 text-sm font-bold text-rose-400 transition-all duration-200 hover:scale-[1.02] hover:bg-rose-500/[0.14] hover:text-rose-300 active:scale-[0.98]"
+          >
+            Sign out
+          </button>
+        </section>
+
       </div>
     </AppShell>
   )

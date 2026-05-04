@@ -302,7 +302,7 @@ export default function Home() {
     })
 
     if (numAmount > 0 && snap) {
-      recordAction(numAmount, spent, false)
+      recordAction(numAmount, spent, isSubscribed())
         .then(result => {
           if (!result) return
           const resolvedStreak = result.currentStreak ?? optimisticStreak

@@ -77,10 +77,16 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
 
             if (req.SendPush)
             {
+                var avoidDays = safePerDay > 0 ? (int)Math.Ceiling(Math.Min(req.Amount / safePerDay, daysLeft)) : 1;
+                var avoidDays1 = Math.Max(1, avoidDays);
+                var body = avoidDays1 <= 1
+                    ? $"Off track. Keep under ${newSafePerDay:F0}/day to recover."
+                    : $"Off track. Keep under ${newSafePerDay:F0}/day for the next {avoidDays1} days.";
+
                 var dead = new List<int>();
                 foreach (var sub in user.Subscriptions)
                 {
-                    var ok = await push.SendAsync(sub, "Update", $"You're off track. New safe: ${newSafePerDay:F0}/day");
+                    var ok = await push.SendAsync(sub, "SmartSpend", body);
                     if (!ok) dead.Add(sub.Id);
                 }
                 if (dead.Count > 0)
@@ -103,10 +109,20 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
         }
         else
         {
-            if (req.SendPush)
+            // Only send an appreciation push for genuine restraint (decision was WAIT/NO).
+            // If the decision was YES (safe) and they didn't spend, that's the expected
+            // outcome — not noteworthy enough to warrant a notification.
+            if (req.SendPush && goodRestraint)
             {
+                var streak = user.Streak.CurrentStreak;
+                var body = streak >= 5
+                    ? $"Day {streak} — this is becoming a habit."
+                    : streak >= 2
+                        ? $"Day {streak} — you're getting better at this."
+                        : "Good call. That took discipline.";
+
                 foreach (var sub in user.Subscriptions)
-                    await push.SendAsync(sub, "Good call", "You stayed on track");
+                    await push.SendAsync(sub, "SmartSpend", body);
             }
 
             await db.SaveChangesAsync();

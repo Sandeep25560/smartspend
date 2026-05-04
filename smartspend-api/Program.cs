@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -39,8 +38,8 @@ builder.WebHost.UseSentry(opts =>
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<AppDbContext>(opts =>
-    opts.UseSqlite(builder.Configuration.GetConnectionString("Default")
-        ?? "Data Source=smartspend.db"));
+    opts.UseNpgsql(builder.Configuration.GetConnectionString("Default")
+        ?? throw new InvalidOperationException("ConnectionStrings:Default is required.")));
 
 // ── Rate limiting: 10 auth attempts per IP per minute ─────────────────────────
 builder.Services.AddRateLimiter(options =>
@@ -130,44 +129,11 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-// ── Database: migrate on startup (backward-compat with EnsureCreated DBs) ─────
+// ── Database: apply pending migrations on startup ─────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var connStr = ctx.Database.GetConnectionString();
-    EnsureSqliteDirectoryExists(connStr);
-
-    // If the DB was previously created with EnsureCreated (no migration history),
-    // seed the history table so Migrate() only applies the new AddNewTables migration.
-    using var conn = new SqliteConnection(connStr);
-    conn.Open();
-    using var checkCmd = conn.CreateCommand();
-    checkCmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='Users'";
-    var tablesExist = checkCmd.ExecuteScalar() is not null;
-
-    if (tablesExist)
-    {
-        using var createHistory = conn.CreateCommand();
-        createHistory.CommandText = """
-            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
-                "MigrationId"     TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
-                "ProductVersion"  TEXT NOT NULL
-            )
-            """;
-        createHistory.ExecuteNonQuery();
-
-        using var seedHistory = conn.CreateCommand();
-        seedHistory.CommandText = """
-            INSERT OR IGNORE INTO "__EFMigrationsHistory" VALUES
-                ('00000000000001_InitialCreate', '8.0.0')
-            """;
-        seedHistory.ExecuteNonQuery();
-    }
-    conn.Close();
-
     ctx.Database.Migrate();
-    ctx.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-    ctx.Database.ExecuteSqlRaw("PRAGMA busy_timeout=5000;");
     app.Services.GetRequiredService<VapidKeyService>(); // warm up VAPID keys
 }
 
@@ -194,13 +160,3 @@ app.MapGet("/health", async (AppDbContext db) =>
 }).AllowAnonymous();
 
 app.Run();
-
-static void EnsureSqliteDirectoryExists(string? connectionString)
-{
-    if (string.IsNullOrWhiteSpace(connectionString)) return;
-    var b = new SqliteConnectionStringBuilder(connectionString);
-    var src = b.DataSource;
-    if (string.IsNullOrWhiteSpace(src) || src.Equals(":memory:", StringComparison.OrdinalIgnoreCase)) return;
-    var dir = Path.GetDirectoryName(Path.GetFullPath(src));
-    if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
-}

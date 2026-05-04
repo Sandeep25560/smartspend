@@ -49,8 +49,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<ActionRecord>()
             .HasIndex(a => new { a.UserId, a.RequestId })
-            .IsUnique()
-            .HasFilter("\"RequestId\" IS NOT NULL AND \"RequestId\" != ''");
+            .IsUnique();
 
         modelBuilder.Entity<AppSetting>()
             .HasKey(s => s.Key);

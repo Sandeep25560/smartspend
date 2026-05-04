@@ -727,24 +727,75 @@ export default function Home() {
               )}
             </div>
             ) : (
-            <div className="animate-fadeIn max-w-[300px]">
+            <div className="animate-fadeIn flex flex-col gap-5">
+
+              {/* Key metrics — balance, safe/day, days until payday */}
+              {!decisionError && user.nextPayday && !paydayPassed && !hasNoBalance && (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    {
+                      label: 'Balance',
+                      value: `$${(user.balance ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                    },
+                    {
+                      label: 'Safe / day',
+                      value: `$${safePerDay.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                    },
+                    {
+                      label: 'Payday in',
+                      value: `${daysLeft}d`,
+                    },
+                  ].map(({ label, value }) => (
+                    <div
+                      key={label}
+                      className="rounded-2xl border border-white/[0.07] bg-white/[0.03] px-3 py-3.5"
+                    >
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-white/30">
+                        {label}
+                      </div>
+                      <div className="mt-1.5 text-[15px] font-black text-white/80">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Streak badge */}
+              {!decisionError && currentStreak(user) > 0 && (
+                <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.05] px-4 py-3">
+                  <span className="text-base leading-none select-none">🔥</span>
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-emerald-300">
+                      Day {currentStreak(user)}
+                    </span>
+                    <span className="ml-1.5 text-xs font-medium text-white/45">
+                      {currentStreak(user) >= 5
+                        ? '— this is becoming a habit.'
+                        : currentStreak(user) >= 2
+                          ? "— you're getting better at this."
+                          : '— keep it going.'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Prompt */}
               <p
-                className="text-2xl font-medium leading-snug tracking-tight text-white/60"
-                style={{
-                  color: 'rgba(255,255,255,0.60)',
-                }}
+                className="text-2xl font-medium leading-snug tracking-tight"
+                style={{ color: 'rgba(255,255,255,0.60)' }}
               >
-                {decisionError || 'Enter an amount to get your answer.'}
+                {decisionError || 'What are you thinking of spending?'}
               </p>
+
               {decisionError === 'Your payday has passed. Update it.' && (
                 <button
                   type="button"
                   onClick={() => navigate('/settings')}
-                  className={`${ui.buttonGhost} mt-5 px-4 py-3`}
+                  className={`${ui.buttonGhost} px-4 py-3`}
                 >
                   Update settings
                 </button>
               )}
+
             </div>
             )}
           </div>

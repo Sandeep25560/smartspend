@@ -15,7 +15,7 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
 {
     private Guid Uid => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    public record ActionRequest(double Amount, bool Spent, bool SendPush = true);
+    public record ActionRequest(double Amount, bool Spent, bool SendPush = true, string? RequestId = null);
 
     private static string DecisionFor(double balance, double safePerDay, double amount)
     {
@@ -32,11 +32,34 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
         return null;
     }
 
+    // ── Record a spending decision ──────────────────────────────────────────
     [HttpPost]
     public async Task<IActionResult> RecordAction([FromBody] ActionRequest req)
     {
         if (req.Amount <= 0 || double.IsNaN(req.Amount) || double.IsInfinity(req.Amount))
             return BadRequest(new { error = "Amount must be positive." });
+
+        // Idempotency: if this requestId was already processed, return the cached result
+        if (!string.IsNullOrWhiteSpace(req.RequestId))
+        {
+            var existing = await db.ActionRecords
+                .Where(a => a.UserId == Uid && a.RequestId == req.RequestId)
+                .FirstOrDefaultAsync();
+
+            if (existing is not null)
+                return Ok(new
+                {
+                    spent          = existing.Spent,
+                    decision       = existing.Decision,
+                    newBalance     = existing.BalanceAfter,
+                    newSafePerDay  = existing.BalanceAfter / Math.Max(1, existing.StreakAfter),
+                    daysLeft       = (int)Math.Max(1, existing.StreakAfter),
+                    currentStreak  = existing.StreakAfter,
+                    confidenceMessage = ConfidenceFor(existing.StreakAfter),
+                    streakIncreased = !existing.Spent,
+                    idempotent      = true,
+                });
+        }
 
         var user = await db.Users
             .Include(u => u.Streak)
@@ -49,17 +72,18 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
         var rawDaysLeft = (user.NextPayday.Value.Date - DateTime.UtcNow.Date).Days;
         if (rawDaysLeft <= 0) return BadRequest(new { error = "Your payday has passed. Update it." });
 
-        var daysLeft = Math.Max(1, rawDaysLeft);
+        var daysLeft   = Math.Max(1, rawDaysLeft);
         var safePerDay = user.Balance / daysLeft;
-        var decision = DecisionFor(user.Balance, safePerDay, req.Amount);
+        var decision   = DecisionFor(user.Balance, safePerDay, req.Amount);
 
         user.Streak ??= new Streak { UserId = user.Id, CurrentStreak = 0 };
         var goodRestraint = !req.Spent && (decision == "WAIT" || decision == "NO");
+        var balanceBefore = user.Balance;
 
         if (req.Spent)
         {
             user.Streak.CurrentStreak = 0;
-            user.Streak.LastUpdated = DateTime.UtcNow;
+            user.Streak.LastUpdated   = DateTime.UtcNow;
         }
         else if (goodRestraint)
         {
@@ -71,17 +95,33 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
         {
             user.Balance   = Math.Max(0, user.Balance - req.Amount);
             user.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
 
             var newSafePerDay = user.Balance / daysLeft;
 
+            // Persist the record before sending push (push can fail independently)
+            db.ActionRecords.Add(new ActionRecord
+            {
+                UserId        = Uid,
+                RequestId     = req.RequestId ?? "",
+                Amount        = req.Amount,
+                Spent         = true,
+                Decision      = decision,
+                BalanceBefore = balanceBefore,
+                BalanceAfter  = user.Balance,
+                SafePerDay    = safePerDay,
+                StreakAfter   = user.Streak.CurrentStreak,
+            });
+            await db.SaveChangesAsync();
+
             if (req.SendPush)
             {
-                var avoidDays = safePerDay > 0 ? (int)Math.Ceiling(Math.Min(req.Amount / safePerDay, daysLeft)) : 1;
-                var avoidDays1 = Math.Max(1, avoidDays);
-                var body = avoidDays1 <= 1
+                var avoidDays = safePerDay > 0
+                    ? (int)Math.Ceiling(Math.Min(req.Amount / safePerDay, daysLeft))
+                    : 1;
+                avoidDays = Math.Max(1, avoidDays);
+                var body = avoidDays <= 1
                     ? $"Off track. Keep under ${newSafePerDay:F0}/day to recover."
-                    : $"Off track. Keep under ${newSafePerDay:F0}/day for the next {avoidDays1} days.";
+                    : $"Off track. Keep under ${newSafePerDay:F0}/day for the next {avoidDays} days.";
 
                 var dead = new List<int>();
                 foreach (var sub in user.Subscriptions)
@@ -98,20 +138,30 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
 
             return Ok(new
             {
-                spent = true,
+                spent             = true,
                 decision,
-                newBalance = user.Balance,
+                newBalance        = user.Balance,
                 newSafePerDay,
                 daysLeft,
-                currentStreak = user.Streak.CurrentStreak,
+                currentStreak     = user.Streak.CurrentStreak,
                 confidenceMessage = ConfidenceFor(user.Streak.CurrentStreak),
             });
         }
         else
         {
-            // Only send an appreciation push for genuine restraint (decision was WAIT/NO).
-            // If the decision was YES (safe) and they didn't spend, that's the expected
-            // outcome — not noteworthy enough to warrant a notification.
+            db.ActionRecords.Add(new ActionRecord
+            {
+                UserId        = Uid,
+                RequestId     = req.RequestId ?? "",
+                Amount        = req.Amount,
+                Spent         = false,
+                Decision      = decision,
+                BalanceBefore = balanceBefore,
+                BalanceAfter  = user.Balance,
+                SafePerDay    = safePerDay,
+                StreakAfter   = user.Streak.CurrentStreak,
+            });
+
             if (req.SendPush && goodRestraint)
             {
                 var streak = user.Streak.CurrentStreak;
@@ -129,15 +179,42 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
 
             return Ok(new
             {
-                spent = false,
+                spent             = false,
                 decision,
-                newBalance = user.Balance,
-                newSafePerDay = safePerDay,
+                newBalance        = user.Balance,
+                newSafePerDay     = safePerDay,
                 daysLeft,
-                currentStreak = user.Streak.CurrentStreak,
+                currentStreak     = user.Streak.CurrentStreak,
                 confidenceMessage = ConfidenceFor(user.Streak.CurrentStreak),
-                streakIncreased = goodRestraint,
+                streakIncreased   = goodRestraint,
             });
         }
+    }
+
+    // ── Spending history ────────────────────────────────────────────────────
+    [HttpGet("history")]
+    public async Task<IActionResult> GetHistory([FromQuery] int limit = 20)
+    {
+        limit = Math.Clamp(limit, 1, 50);
+
+        var records = await db.ActionRecords
+            .Where(a => a.UserId == Uid)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(limit)
+            .Select(a => new
+            {
+                a.Id,
+                a.Amount,
+                a.Spent,
+                a.Decision,
+                a.BalanceBefore,
+                a.BalanceAfter,
+                a.SafePerDay,
+                a.StreakAfter,
+                a.CreatedAt,
+            })
+            .ToListAsync();
+
+        return Ok(records);
     }
 }

@@ -14,4 +14,7 @@ public class User
 
     public Streak? Streak { get; set; }
     public ICollection<PushSubscription> Subscriptions { get; set; } = new List<PushSubscription>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+    public ICollection<ActionRecord> ActionRecords { get; set; } = new List<ActionRecord>();
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import NotificationCard from '../components/NotificationCard'
-import { logout, updateProfile } from '../services/api'
+import { logout, updateProfile, deleteAccount } from '../services/api'
 import { useUser } from '../context/UserContext'
 import { ui } from '../utils/designSystem'
 import { daysUntilPayday } from '../utils/decisionHelpers'
@@ -21,9 +21,13 @@ export default function Settings() {
   const [payday, setPayday] = useState(user?.nextPayday ? user.nextPayday.split('T')[0] : '')
   const [frequency, setFreq] = useState(user?.payFrequency ?? 'Monthly')
   const [loading, setLoading] = useState(!user)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const [error, setError]           = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteEmail, setDeleteEmail] = useState('')
+  const [deleting, setDeleting]     = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const minDate = new Date()
   minDate.setDate(minDate.getDate() + 1)
@@ -230,7 +234,7 @@ export default function Settings() {
           <NotificationCard />
         </section>
 
-        {/* Sign out */}
+        {/* Sign out + delete */}
         <section className="flex flex-col gap-2">
           <div className={ui.eyebrow}>Danger zone</div>
           <button
@@ -240,6 +244,63 @@ export default function Settings() {
           >
             Sign out
           </button>
+
+          {!deleteOpen ? (
+            <button
+              type="button"
+              onClick={() => { setDeleteOpen(true); setDeleteError('') }}
+              className="rounded-2xl border border-rose-500/10 bg-transparent px-4 py-3.5 text-sm font-semibold text-rose-500/60 transition-all duration-200 hover:border-rose-500/25 hover:text-rose-400 active:scale-[0.98]"
+            >
+              Delete account
+            </button>
+          ) : (
+            <div className="animate-panelIn rounded-2xl border border-rose-500/25 bg-rose-500/[0.06] px-4 py-4">
+              <p className="text-sm font-bold text-rose-300">Permanently delete your account?</p>
+              <p className="mt-1 text-xs font-medium leading-relaxed text-white/50">
+                All your data — balance, history, streaks — will be gone forever. Type your email to confirm.
+              </p>
+              <input
+                type="email"
+                value={deleteEmail}
+                onChange={e => setDeleteEmail(e.target.value)}
+                placeholder={user?.email}
+                className="mt-3 w-full rounded-xl border border-white/[0.09] bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white outline-none transition-all duration-200 placeholder:text-white/20 focus:border-rose-400/40 focus:ring-1 focus:ring-rose-400/20 [color-scheme:dark]"
+              />
+              {deleteError && (
+                <p className="mt-2 text-xs font-semibold text-rose-400">{deleteError}</p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setDeleteOpen(false); setDeleteEmail(''); setDeleteError('') }}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] py-3 text-sm font-bold text-white/60 transition-all duration-200 hover:bg-white/[0.09] active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting || deleteEmail.trim().toLowerCase() !== user?.email}
+                  onClick={async () => {
+                    setDeleting(true)
+                    setDeleteError('')
+                    try {
+                      await deleteAccount()
+                      logout()
+                      navigate('/', { replace: true })
+                    } catch (err) {
+                      setDeleteError(err.message)
+                      setDeleting(false)
+                    }
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-500/80 py-3 text-sm font-black text-white transition-all duration-200 hover:bg-rose-500 active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-rose-500/80"
+                >
+                  {deleting
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    : 'Delete forever'}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
       </div>

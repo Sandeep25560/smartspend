@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
-import { getStreak } from '../services/api'
+import { getStreak, getActionHistory } from '../services/api'
 import { useUser } from '../context/UserContext'
 import { dailySafeAmount, daysUntilPayday, todayStatus, STATES } from '../utils/decisionHelpers'
 import { statusTheme, ui } from '../utils/designSystem'
@@ -23,9 +23,10 @@ function streakLabel(n) {
 export default function Insights() {
   const navigate = useNavigate()
   const { user, refresh, syncError } = useUser()
-  const [streak, setStreak] = useState(0)
+  const [streak, setStreak]   = useState(0)
+  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(!user)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
 
   useEffect(() => {
     if (!localStorage.getItem('ss_token')) { navigate('/login', { replace: true }); return }
@@ -43,6 +44,10 @@ export default function Insights() {
     getStreak()
       .then(s => setStreak(s.currentStreak ?? 0))
       .catch(() => setStreak(user?.streak?.currentStreak ?? 0))
+
+    getActionHistory(15)
+      .then(setHistory)
+      .catch(() => {})
   }, [navigate, refresh])
 
   if (loading) return <AppShell loading />
@@ -196,6 +201,59 @@ export default function Insights() {
                 className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all duration-700"
                 style={{ width: `${Math.min(100, (streak / 10) * 100)}%` }}
               />
+            </div>
+          )}
+        </section>
+
+        {/* Spending history */}
+        <section className={`${ui.card} ${ui.cardPad}`}>
+          <div className={ui.eyebrow}>History</div>
+          {history.length === 0 ? (
+            <p className="mt-4 text-sm font-medium text-white/40">
+              Your decisions will appear here after you record them on the home screen.
+            </p>
+          ) : (
+            <div className="mt-4 flex flex-col gap-2">
+              {history.map(h => {
+                const decColor = h.decision === 'YES'
+                  ? '#34d399'
+                  : h.decision === 'WAIT'
+                    ? '#fbbf24'
+                    : '#f87171'
+                const date = new Date(h.createdAt)
+                const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                return (
+                  <div
+                    key={h.id}
+                    className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-3"
+                  >
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: decColor, boxShadow: `0 0 6px ${decColor}88` }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className={`text-sm font-black ${h.spent ? 'text-rose-300' : 'text-emerald-300'}`}>
+                          {h.spent ? '-' : ''}${h.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        </span>
+                        <span className="text-[11px] font-semibold text-white/35">
+                          {h.spent ? 'spent' : 'skipped'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-medium text-white/30">
+                        {dateStr} · {timeStr}
+                      </div>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black"
+                      style={{ color: decColor, background: `${decColor}18` }}
+                    >
+                      {h.decision}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </section>

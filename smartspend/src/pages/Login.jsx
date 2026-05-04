@@ -97,6 +97,13 @@ export default function Login() {
               ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               : 'Sign in'}
           </button>
+
+          <Link
+            to="/forgot-password"
+            className="block text-center text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60"
+          >
+            Forgot your password?
+          </Link>
         </form>
 
         <p className="mt-8 text-center text-sm font-medium text-white/35">

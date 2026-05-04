@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartSpend.Api.Data;
+using SmartSpend.Api.Models;
 using SmartSpend.Api.Services;
 
 namespace SmartSpend.Api.BackgroundServices;
@@ -10,6 +11,8 @@ public class EveningNudgeService(
     IConfiguration config)
     : BackgroundService
 {
+    private const string FireKey = "notification:evening:next_fire_utc";
+
     private TimeZoneInfo GetTimeZone()
     {
         var tzId = config["Notifications:TimeZone"] ?? "Asia/Kolkata";
@@ -25,19 +28,60 @@ public class EveningNudgeService(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var tz        = GetTimeZone();
-            var nowLocal  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var nextLocal = nowLocal.Hour < 19
-                ? nowLocal.Date.AddHours(19)
-                : nowLocal.Date.AddDays(1).AddHours(19);
-            var nextUtc = TimeZoneInfo.ConvertTimeToUtc(nextLocal, tz);
+            var nextUtc = await GetOrComputeNextFireAsync();
+            var delay   = nextUtc - DateTime.UtcNow;
 
-            logger.LogInformation("Next evening nudge scheduled at {Time} ({TZ}).", nextLocal, tz.Id);
-            await Task.Delay(nextUtc - DateTime.UtcNow, stoppingToken);
+            if (delay > TimeSpan.Zero)
+            {
+                logger.LogInformation("Evening nudge scheduled at {Time} UTC (in {Min:F0} min).", nextUtc, delay.TotalMinutes);
+                await Task.Delay(delay, stoppingToken);
+            }
 
             if (!stoppingToken.IsCancellationRequested)
+            {
                 await SendEveningBatchAsync(stoppingToken);
+                await PersistNextFireAsync();
+            }
         }
+    }
+
+    private async Task<DateTime> GetOrComputeNextFireAsync()
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var setting = await db.AppSettings.FindAsync(FireKey);
+        if (setting is not null && DateTime.TryParse(setting.Value, out var stored) && stored > DateTime.UtcNow)
+            return stored;
+
+        return ComputeNextFire();
+    }
+
+    private async Task PersistNextFireAsync()
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var next  = ComputeNextFire();
+        var entry = await db.AppSettings.FindAsync(FireKey);
+        if (entry is null)
+            db.AppSettings.Add(new AppSetting { Key = FireKey, Value = next.ToString("o") });
+        else
+        {
+            entry.Value     = next.ToString("o");
+            entry.UpdatedAt = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private DateTime ComputeNextFire()
+    {
+        var tz       = GetTimeZone();
+        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var nextLocal = nowLocal.Hour < 19
+            ? nowLocal.Date.AddHours(19)
+            : nowLocal.Date.AddDays(1).AddHours(19);
+        return TimeZoneInfo.ConvertTimeToUtc(nextLocal, tz);
     }
 
     private async Task SendEveningBatchAsync(CancellationToken ct)
@@ -81,9 +125,8 @@ public class EveningNudgeService(
         {
             db.Subscriptions.RemoveRange(db.Subscriptions.Where(s => deadSubs.Contains(s.Id)));
             await db.SaveChangesAsync(ct);
-            logger.LogInformation("Removed {Count} expired subscriptions.", deadSubs.Count);
         }
 
-        logger.LogInformation("Evening nudge batch complete — {Count} users notified.", users.Count);
+        logger.LogInformation("Evening nudge complete — {Count} users notified.", users.Count);
     }
 }

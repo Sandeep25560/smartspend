@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { notifyDecision, recordAction } from '../services/api'
+import { notifyDecision, recordAction, updateProfile } from '../services/api'
 import { isSubscribed } from '../services/pushNotifications'
 import { useUser } from '../context/UserContext'
 import {
@@ -8,6 +8,7 @@ import {
 } from '../utils/decisionHelpers'
 import BottomNav from '../components/BottomNav'
 import NotificationCard from '../components/NotificationCard'
+import DatePicker from '../components/DatePicker'
 import ActionPrompt from '../components/ActionPrompt'
 import { ui } from '../utils/designSystem'
 
@@ -66,6 +67,7 @@ const emptyDecisionState = {
   spent: null,
   timerStarted: false,
   promptMode: 'hidden',
+  requestId: '',
   capturedSafePerDay: 0,
   capturedNewSafePerDay: 0,
   capturedBalance: 0,
@@ -134,8 +136,11 @@ function personalizationFor(safePerDay) {
 export default function Home() {
   const navigate = useNavigate()
   const { user, setUser, refresh, syncError } = useUser()
-  const [loading, setLoading] = useState(!user)
-  const [pageError, setPageError] = useState('')
+  const [loading, setLoading]         = useState(!user)
+  const [pageError, setPageError]     = useState('')
+  const [paydayPrompt, setPaydayPrompt] = useState(false)
+  const [newPayday, setNewPayday]     = useState('')
+  const [paydaySaving, setPaydaySaving] = useState(false)
   const [decisionError, setDecisionError] = useState('')
   const [actionError, setActionError] = useState('')
   const [amount, setAmount] = useState('')
@@ -174,6 +179,16 @@ export default function Home() {
   useEffect(() => { userRef.current = user }, [user])
   useEffect(() => { decisionStateRef.current = decisionState }, [decisionState])
 
+  // Auto-show payday prompt once loading completes and payday has passed
+  useEffect(() => {
+    if (!loading && user?.nextPayday) {
+      const passed = (user.nextPayday
+        ? (new Date(user.nextPayday).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000
+        : 1) <= 0
+      if (passed) setPaydayPrompt(true)
+    }
+  }, [loading, user?.nextPayday])
+
   const clearActionTimers = useCallback(() => {
     clearTimeout(actionTimer.current)
     clearTimeout(actionHideTimer.current)
@@ -201,6 +216,7 @@ export default function Home() {
       spent: null,
       timerStarted: true,
       promptMode: 'immediate',
+      requestId: crypto.randomUUID(),
       capturedSafePerDay: 0,
       capturedNewSafePerDay: 0,
       capturedBalance: 0,
@@ -312,7 +328,7 @@ export default function Home() {
     })
 
     if (numAmount > 0 && snap) {
-      recordAction(numAmount, spent, isSubscribed())
+      recordAction(numAmount, spent, isSubscribed(), currentDecision.requestId || null)
         .then(result => {
           if (!result) return
           const resolvedStreak = result.currentStreak ?? optimisticStreak
@@ -487,8 +503,67 @@ export default function Home() {
   const cursorColor = dec?.color ?? '#71717a'
   const personalizationMessage = status ? personalizationFor(safePerDay) : ''
 
+  async function saveNewPayday() {
+    if (!newPayday) return
+    setPaydaySaving(true)
+    try {
+      const u = await updateProfile({
+        balance: user.balance,
+        nextPayday: new Date(`${newPayday}T12:00:00`).toISOString(),
+        payFrequency: user.payFrequency,
+        onboardingCompleted: true,
+      })
+      setUser(u)
+      setPaydayPrompt(false)
+      setNewPayday('')
+    } catch {
+      // silent — user can try again or navigate to Settings
+    } finally {
+      setPaydaySaving(false)
+    }
+  }
+
   return (
     <div className={ui.screen}>
+
+      {/* Payday auto-advance prompt — shown when nextPayday has passed */}
+      {!loading && paydayPassed && paydayPrompt && (
+        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#0b0f1a]/96 px-6 pt-16 pb-10 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-md">
+            <div className="mb-6">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400">Action needed</span>
+              <h2 className="mt-2 text-[28px] font-black leading-tight tracking-tight text-white">
+                Payday has passed.<br />When's the next one?
+              </h2>
+              <p className="mt-2 text-[15px] font-medium text-white/45">
+                Your answers won't be accurate until this is updated.
+              </p>
+            </div>
+            <DatePicker
+              value={newPayday}
+              onChange={setNewPayday}
+              minDate={new Date().toISOString().split('T')[0]}
+            />
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                onClick={saveNewPayday}
+                disabled={!newPayday || paydaySaving}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100"
+              >
+                {paydaySaving
+                  ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  : 'Update payday'}
+              </button>
+              <button
+                onClick={() => setPaydayPrompt(false)}
+                className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60"
+              >
+                Remind me later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {Object.entries(DEC).map(([s, d]) => (
         <div

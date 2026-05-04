@@ -53,7 +53,7 @@ export default function Signup() {
             Know before<br />you spend.
           </h1>
           <p className="mt-2 text-[15px] font-medium text-white/45">
-            Takes 60 seconds. No card required.
+            Set up once. Check before every spend — 5 seconds.
           </p>
         </div>
 

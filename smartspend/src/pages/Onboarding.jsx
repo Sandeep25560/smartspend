@@ -133,7 +133,7 @@ export default function Onboarding() {
                   How much do you<br />have right now?
                 </h2>
                 <p className="mb-10 text-[15px] font-medium text-white/45">
-                  The money available to spend until payday.
+                  We use this to answer: can I afford this — before you buy.
                 </p>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-4xl font-light text-white/40">$</span>
@@ -281,7 +281,7 @@ export default function Onboarding() {
                     <div>
                       <p className="text-sm font-bold text-white/90">Evening nudge</p>
                       <p className="mt-0.5 text-xs font-medium text-white/50">
-                        "Don't lose your budget tonight" — 7:00 PM
+                        "About to spend tonight? Check first." — 7:00 PM
                       </p>
                     </div>
                   </div>

@@ -672,7 +672,7 @@ export default function Home() {
               className="text-[11px] font-semibold tracking-[0.20em] uppercase"
               style={{ color: '#9ca3af' }}
             >
-              Today — {TODAY_LABEL[todayS]}
+              Today's check — {TODAY_LABEL[todayS]}
             </p>
           </div>
         </div>
@@ -1025,6 +1025,12 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {!decisionError && (
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/20">
+                  Check before you spend — not after
+                </p>
               )}
 
               {decisionError === 'Your payday has passed. Update it.' && (

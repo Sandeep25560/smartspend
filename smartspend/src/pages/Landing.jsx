@@ -7,15 +7,15 @@ const STATUS_CARDS = [
     border: 'border-emerald-500/20',
     bg: 'bg-emerald-500/[0.07]',
     label: "You're good",
-    sub: 'Looks good. Go for it.',
+    sub: 'Go for it.',
     delay: '60ms',
   },
   {
     dot: '#fbbf24',
     border: 'border-amber-500/20',
     bg: 'bg-amber-500/[0.07]',
-    label: 'Go slow',
-    sub: 'Not the best move right now.',
+    label: 'Hold on',
+    sub: 'Think before you tap pay.',
     delay: '140ms',
   },
   {
@@ -23,7 +23,7 @@ const STATUS_CARDS = [
     border: 'border-rose-500/20',
     bg: 'bg-rose-500/[0.07]',
     label: 'Skip this',
-    sub: 'You may run out early.',
+    sub: 'Not today — wait it out.',
     delay: '220ms',
   },
 ]
@@ -55,12 +55,12 @@ export default function Landing() {
           {/* Hero */}
           <div className="animate-fadeIn mb-10">
             <h1 className="text-[44px] font-black leading-[1.08] tracking-tight text-white">
-              Will you run out<br />
-              <span className="text-emerald-300">before payday?</span>
+              Know before<br />
+              <span className="text-emerald-300">you spend.</span>
             </h1>
             <p className="mt-4 text-[16px] font-medium leading-relaxed text-white/50">
-              Know in seconds. No budgets, no stress.<br />
-              Just a clear answer.
+              Every other app shows the damage after.<br />
+              SmartSpend answers before — in 5 seconds.
             </p>
           </div>
 
@@ -83,6 +83,10 @@ export default function Landing() {
               </div>
             ))}
           </div>
+
+          <p className="mt-5 text-center text-[11px] font-bold uppercase tracking-[0.20em] text-white/25">
+            The check before every spend
+          </p>
 
         </div>
 

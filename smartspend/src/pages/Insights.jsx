@@ -91,8 +91,8 @@ export default function Insights() {
 
         <header className="mb-2">
           <div className={ui.eyebrow}>Insights</div>
-          <h1 className={`${ui.title} mt-3`}>Today, simplified.</h1>
-          <p className={`${ui.subtitle} mt-3`}>Just enough to know what feels safe.</p>
+          <h1 className={`${ui.title} mt-3`}>Your spending checks.</h1>
+          <p className={`${ui.subtitle} mt-3`}>Every time you checked before spending.</p>
         </header>
 
         {syncError && (
@@ -208,10 +208,10 @@ export default function Insights() {
 
         {/* Spending history */}
         <section className={`${ui.card} ${ui.cardPad}`}>
-          <div className={ui.eyebrow}>History</div>
+          <div className={ui.eyebrow}>Recent checks</div>
           {history.length === 0 ? (
             <p className="mt-4 text-sm font-medium text-white/40">
-              Your decisions will appear here after you record them on the home screen.
+              Each time you check before spending, it shows up here.
             </p>
           ) : (
             <div className="mt-4 flex flex-col gap-2">

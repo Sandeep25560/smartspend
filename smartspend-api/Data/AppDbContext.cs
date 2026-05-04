@@ -48,8 +48,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ActionRecord>()
-            .HasIndex(a => a.RequestId)
-            .IsUnique();
+            .HasIndex(a => new { a.UserId, a.RequestId })
+            .IsUnique()
+            .HasFilter("\"RequestId\" IS NOT NULL AND \"RequestId\" != ''");
 
         modelBuilder.Entity<AppSetting>()
             .HasKey(s => s.Key);

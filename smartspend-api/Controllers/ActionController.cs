@@ -102,7 +102,7 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
             db.ActionRecords.Add(new ActionRecord
             {
                 UserId        = Uid,
-                RequestId     = req.RequestId ?? "",
+                RequestId     = req.RequestId,
                 Amount        = req.Amount,
                 Spent         = true,
                 Decision      = decision,
@@ -152,7 +152,7 @@ public class ActionController(AppDbContext db, PushService push) : ControllerBas
             db.ActionRecords.Add(new ActionRecord
             {
                 UserId        = Uid,
-                RequestId     = req.RequestId ?? "",
+                RequestId     = req.RequestId,
                 Amount        = req.Amount,
                 Spent         = false,
                 Decision      = decision,

@@ -4,7 +4,7 @@ public class ActionRecord
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
-    public string RequestId { get; set; } = ""; // idempotency key
+    public string? RequestId { get; set; } // idempotency key (null when not provided)
     public double Amount { get; set; }
     public bool Spent { get; set; }
     public string Decision { get; set; } = ""; // YES / WAIT / NO

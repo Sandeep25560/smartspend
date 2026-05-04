@@ -11,8 +11,6 @@ import NotificationCard from '../components/NotificationCard'
 import ActionPrompt from '../components/ActionPrompt'
 import { ui } from '../utils/designSystem'
 
-const MAX = 1000
-
 const DEC = {
   safe: {
     word: 'YES',
@@ -49,6 +47,17 @@ const TODAY_LABEL = { safe: 'Good', careful: 'Careful', stop: 'At Risk' }
 
 const ACTION_PROMPT_DELAY = 14000
 const ACTION_FALLBACK_TIMEOUT = 8500
+
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function haptic(ms = 8) {
+  if (navigator.vibrate) navigator.vibrate(ms)
+}
 
 const emptyDecisionState = {
   amount: '',
@@ -257,6 +266,7 @@ export default function Home() {
     const currentDecision = decisionStateRef.current
     if (!currentDecision.status || currentDecision.responded) return
 
+    haptic(spent ? 14 : 8)
     actionBusy.current = true
     clearActionTimers()
     setActionError('')
@@ -407,7 +417,7 @@ export default function Home() {
   function onInput(e) {
     const v = sanitizeAmount(e.target.value)
     setAmount(v)
-    setSlider(Math.min(parseFloat(v) || 0, MAX))
+    setSlider(Math.min(parseFloat(v) || 0, sliderMax))
     evaluate(v)
     triggerAmountBump()
   }
@@ -464,8 +474,9 @@ export default function Home() {
   const daysLeft = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
   const paydayPassed = !!user.nextPayday && daysLeft <= 0
   const hasNoBalance = (user.balance ?? 0) <= 0
+  const sliderMax = Math.max(Math.ceil(user.balance ?? 100), 100)
   const dec = status ? DEC[status] : null
-  const pct = (slider / MAX) * 100
+  const pct = (slider / sliderMax) * 100
   const fill = dec?.color ?? '#2a2a2d'
   const sliderGradient = dec
     ? `linear-gradient(to right, ${dec.gradA}, ${dec.gradB})`
@@ -498,20 +509,25 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col px-6 pt-12 pb-28">
 
-        <div className="flex items-center gap-2 mb-8 animate-fadeIn">
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style={{
-              backgroundColor: DOT_COLOR[todayS],
-              boxShadow: `0 0 5px ${DOT_COLOR[todayS]}99`,
-            }}
-          />
-          <p
-            className="text-[11px] font-semibold tracking-[0.20em] uppercase"
-            style={{ color: '#9ca3af' }}
-          >
-            Today - {TODAY_LABEL[todayS]}
+        <div className="mb-8 animate-fadeIn">
+          <p className="mb-1.5 text-[13px] font-semibold text-white/30">
+            {greeting()}
           </p>
+          <div className="flex items-center gap-2">
+            <span
+              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+              style={{
+                backgroundColor: DOT_COLOR[todayS],
+                boxShadow: `0 0 5px ${DOT_COLOR[todayS]}99`,
+              }}
+            />
+            <p
+              className="text-[11px] font-semibold tracking-[0.20em] uppercase"
+              style={{ color: '#9ca3af' }}
+            >
+              Today — {TODAY_LABEL[todayS]}
+            </p>
+          </div>
         </div>
 
         {(syncError || pageError) && (
@@ -654,7 +670,7 @@ export default function Home() {
             <input
               type="range"
               min="0"
-              max={MAX}
+              max={sliderMax}
               step="1"
               value={slider}
               onChange={onSlide}

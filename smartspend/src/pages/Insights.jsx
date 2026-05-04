@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
-import MetricCard from '../components/MetricCard'
 import { getStreak } from '../services/api'
 import { useUser } from '../context/UserContext'
 import { dailySafeAmount, daysUntilPayday, todayStatus, STATES } from '../utils/decisionHelpers'
@@ -9,6 +8,16 @@ import { statusTheme, ui } from '../utils/designSystem'
 
 function money(value) {
   return `$${Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+}
+
+const PERIOD_DAYS = { Weekly: 7, Biweekly: 14, Monthly: 30, Irregular: null }
+
+function streakLabel(n) {
+  if (n >= 10) return 'You\'re on a roll.'
+  if (n >= 5)  return 'This is becoming a habit.'
+  if (n >= 2)  return 'You\'re getting better at this.'
+  if (n === 1) return 'Day 1 — keep going.'
+  return 'Start a streak with one good call.'
 }
 
 export default function Insights() {
@@ -26,11 +35,7 @@ export default function Insights() {
         if (!u.onboardingCompleted) navigate('/onboarding', { replace: true })
       })
       .catch((err) => {
-        if (!localStorage.getItem('ss_token')) {
-          navigate('/login', { replace: true })
-          return
-        }
-
+        if (!localStorage.getItem('ss_token')) { navigate('/login', { replace: true }); return }
         setError(err.message || 'Could not load your setup.')
       })
       .finally(() => setLoading(false))
@@ -54,11 +59,7 @@ export default function Insights() {
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => navigate('/login', { replace: true })}
-            className={`${ui.buttonPrimary} mt-5`}
-          >
+          <button type="button" onClick={() => navigate('/login', { replace: true })} className={`${ui.buttonPrimary} mt-5`}>
             Sign in
           </button>
         </div>
@@ -66,21 +67,26 @@ export default function Insights() {
     )
   }
 
-  const status = todayStatus(user.balance, user.nextPayday)
-  const theme = statusTheme[status]
-  const safeDay = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday) : 0
-  const daysLeft = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
-  const message = STATES[status]?.messages?.[0] ?? 'You have a clear answer.'
+  const status    = todayStatus(user.balance, user.nextPayday)
+  const theme     = statusTheme[status]
+  const safeDay   = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday) : 0
+  const daysLeft  = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
+  const message   = STATES[status]?.messages?.[0] ?? 'You have a clear answer.'
+
+  // Pay period progress
+  const periodTotal = PERIOD_DAYS[user.payFrequency] ?? daysLeft + 7
+  const daysElapsed = Math.max(0, periodTotal - daysLeft)
+  const periodPct   = Math.min(100, Math.round((daysElapsed / periodTotal) * 100))
+  const budgetPct   = Math.min(100, Math.round((daysLeft / periodTotal) * 100))
 
   return (
     <AppShell tint={theme.tint}>
       <div className={ui.stack}>
+
         <header className="mb-2">
           <div className={ui.eyebrow}>Insights</div>
           <h1 className={`${ui.title} mt-3`}>Today, simplified.</h1>
-          <p className={`${ui.subtitle} mt-3`}>
-            Just enough to know what feels safe.
-          </p>
+          <p className={`${ui.subtitle} mt-3`}>Just enough to know what feels safe.</p>
         </header>
 
         {syncError && (
@@ -89,56 +95,111 @@ export default function Insights() {
           </div>
         )}
 
+        {/* Status card */}
         <section className={`${ui.card} ${ui.cardPad}`}>
           <div className="flex items-center gap-2">
             <span
               className="h-1.5 w-1.5 rounded-full"
-              style={{
-                backgroundColor: theme.color,
-                boxShadow: `0 0 10px rgba(${theme.rgb},0.34)`,
-              }}
+              style={{ backgroundColor: theme.color, boxShadow: `0 0 10px rgba(${theme.rgb},0.34)` }}
             />
             <div className={ui.eyebrow}>Right now</div>
           </div>
-
-          <div
-            className={`mt-4 bg-gradient-to-br ${theme.gradient} bg-clip-text text-[48px] font-black leading-none tracking-tight text-transparent`}
-          >
+          <div className={`mt-4 bg-gradient-to-br ${theme.gradient} bg-clip-text text-[48px] font-black leading-none tracking-tight text-transparent`}>
             {theme.word}
           </div>
-          <div className={`mt-3 text-lg font-black tracking-tight ${theme.text}`}>
-            {theme.label}
-          </div>
-          <p className="mt-2 text-sm font-semibold leading-relaxed text-white/70">
-            {message}
-          </p>
+          <div className={`mt-3 text-lg font-black tracking-tight ${theme.text}`}>{theme.label}</div>
+          <p className="mt-2 text-sm font-semibold leading-relaxed text-white/70">{message}</p>
         </section>
 
-        <section className="grid grid-cols-2 gap-4">
-          <MetricCard
-            label="Safe today"
-            value={money(safeDay)}
-            accent={statusTheme.safe.color}
-          />
-          <MetricCard
-            label="Days to payday"
-            value={daysLeft}
-          />
+        {/* Key numbers */}
+        <section className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'Balance',    value: money(user.balance), color: 'rgba(255,255,255,0.88)' },
+            { label: 'Safe / day', value: money(safeDay),      color: theme.color },
+            { label: 'Days left',  value: `${daysLeft}d`,      color: 'rgba(255,255,255,0.88)' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] px-3 py-4">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-white/30">{label}</div>
+              <div className="mt-2 text-[17px] font-black leading-none" style={{ color }}>{value}</div>
+            </div>
+          ))}
         </section>
 
-        <MetricCard
-          label="You have"
-          value={money(user.balance)}
-        />
+        {/* Pay period progress */}
+        {user.nextPayday && daysLeft > 0 && (
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex items-center justify-between">
+              <div className={ui.eyebrow}>Pay cycle</div>
+              <div className="text-[11px] font-semibold text-white/40">
+                {user.payFrequency ?? 'Monthly'}
+              </div>
+            </div>
 
+            <div className="mt-4 flex items-center justify-between text-xs font-semibold text-white/50">
+              <span>{daysElapsed}d done</span>
+              <span>{daysLeft}d left</span>
+            </div>
+
+            {/* Timeline bar */}
+            <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+              <div
+                className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${periodPct}%`,
+                  background: `linear-gradient(to right, ${theme.color}99, ${theme.color})`,
+                }}
+              />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-xs font-medium text-white/45">
+                {periodPct}% through the period
+              </p>
+              <p className="text-xs font-semibold" style={{ color: theme.color }}>
+                {budgetPct}% budget left
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* Streak */}
         <section className={`${ui.card} ${ui.cardPad}`}>
-          <div className="text-[34px] font-black leading-none tracking-tight text-white/90">
-            {streak} day{streak === 1 ? '' : 's'}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className={ui.eyebrow}>Streak</div>
+              <div className="mt-3 flex items-baseline gap-1.5">
+                {streak > 0 && <span className="text-lg leading-none select-none">🔥</span>}
+                <span className="text-[34px] font-black leading-none tracking-tight text-white/90">
+                  {streak}
+                </span>
+                <span className="text-sm font-semibold text-white/40">
+                  {streak === 1 ? 'day' : 'days'}
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-white/55">
+                {streakLabel(streak)}
+              </p>
+            </div>
+
+            {streak >= 5 && (
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] text-2xl"
+              >
+                {streak >= 10 ? '🏆' : '⭐'}
+              </div>
+            )}
           </div>
-          <p className="mt-3 text-sm font-semibold leading-relaxed text-white/60">
-            {streak > 0 ? 'Streak - staying on track.' : 'Start a streak with one clear call.'}
-          </p>
+
+          {streak > 0 && (
+            <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all duration-700"
+                style={{ width: `${Math.min(100, (streak / 10) * 100)}%` }}
+              />
+            </div>
+          )}
         </section>
+
       </div>
     </AppShell>
   )

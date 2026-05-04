@@ -5,7 +5,9 @@ import {
   currentPermission,
   disablePush,
   enablePush,
+  isIOS,
   isPushSupported,
+  isStandalone,
   isSubscribed,
 } from '../services/pushNotifications'
 import { ui } from '../utils/designSystem'
@@ -36,7 +38,12 @@ export default function NotificationCard({ compact = false }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!isPushSupported()) { setStatus('unsupported'); return }
+    if (!isPushSupported()) {
+      // On iOS, Push only works when installed as a PWA (added to home screen).
+      // Show install instructions instead of a dead-end "unsupported" message.
+      setStatus(isIOS() && !isStandalone() ? 'ios-prompt' : 'unsupported')
+      return
+    }
     if (currentPermission() === 'denied') { setStatus('denied'); return }
     if (currentPermission() !== 'granted') { setStatus('idle'); return }
 
@@ -70,14 +77,18 @@ export default function NotificationCard({ compact = false }) {
   const isBusy = status === 'requesting' || status === 'turningOff'
   const compactLabel = status === 'unsupported'
     ? 'Reminders unavailable'
-    : isOn
-      ? 'Daily reminders on'
-      : 'Daily reminders off'
+    : status === 'ios-prompt'
+      ? 'Add to Home Screen to enable'
+      : isOn
+        ? 'Daily reminders on'
+        : 'Daily reminders off'
   const helperText = status === 'unsupported'
     ? 'This browser does not support reminders.'
-    : isOn
-      ? "We'll nudge you each morning."
-      : "We'll ask when you turn this on."
+    : status === 'ios-prompt'
+      ? 'iPhone requires the app installed.'
+      : isOn
+        ? "We'll nudge you each morning."
+        : "We'll ask when you turn this on."
 
   async function toggle() {
     setError('')
@@ -157,6 +168,32 @@ export default function NotificationCard({ compact = false }) {
             Manage
           </button>
         </div>
+      </div>
+    )
+  }
+
+  if (status === 'ios-prompt') {
+    return (
+      <div className={`${ui.card} ${ui.cardPad}`}>
+        <div className="text-sm font-bold text-white/90">Enable on iPhone</div>
+        <p className="mt-1 text-xs font-medium leading-relaxed text-white/60">
+          iOS requires the app installed to your Home Screen before notifications can be enabled.
+        </p>
+        <ol className="mt-4 flex flex-col gap-3">
+          {[
+            { step: '1', text: 'Tap the Share button at the bottom of Safari' },
+            { step: '2', text: 'Tap "Add to Home Screen"' },
+            { step: '3', text: 'Open SmartSpend from your Home Screen' },
+            { step: '4', text: 'Come back here and turn on reminders' },
+          ].map(({ step, text }) => (
+            <li key={step} className="flex items-start gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white/70">
+                {step}
+              </span>
+              <span className="pt-0.5 text-xs font-medium leading-relaxed text-white/70">{text}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     )
   }

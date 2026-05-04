@@ -4,6 +4,23 @@ export function isPushSupported() {
   return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
 }
 
+// True on iPhone/iPad regardless of iOS version
+export function isIOS() {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    // iPads on iOS 13+ report as MacIntel
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
+// True when running as an installed PWA (home screen), not in browser tab
+export function isStandalone() {
+  return (
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches
+  )
+}
+
 export function currentPermission() {
   if (!isPushSupported()) return 'unsupported'
   return Notification.permission // 'default' | 'granted' | 'denied'

@@ -1,0 +1,29 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "smartspend-api", "smartspend-api", "{160678E1-4B0B-585E-7AFD-9C39A44E1CD4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartSpend.Api", "smartspend-api\SmartSpend.Api.csproj", "{7B532B41-8882-6649-F470-5DC39206E4C7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B532B41-8882-6649-F470-5DC39206E4C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B532B41-8882-6649-F470-5DC39206E4C7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B532B41-8882-6649-F470-5DC39206E4C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B532B41-8882-6649-F470-5DC39206E4C7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7B532B41-8882-6649-F470-5DC39206E4C7} = {160678E1-4B0B-585E-7AFD-9C39A44E1CD4}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8FD98F1C-55AC-4038-826E-E119272DD0C4}
+	EndGlobalSection
+EndGlobal

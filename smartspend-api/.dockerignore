@@ -1,0 +1,7 @@
+bin/
+obj/
+smartspend.db
+vapid.json
+*.log
+.env
+.env.*

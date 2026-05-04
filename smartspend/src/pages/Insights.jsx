@@ -5,6 +5,7 @@ import { getStreak, getActionHistory } from '../services/api'
 import { useUser } from '../context/UserContext'
 import { dailySafeAmount, daysUntilPayday, todayStatus, STATES } from '../utils/decisionHelpers'
 import { statusTheme, ui } from '../utils/designSystem'
+import { computeRank, getNextRank, RANKS } from '../utils/rank'
 
 function money(value) {
   return `$${Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -34,13 +35,6 @@ function computePersonality(history) {
   return `${ratio}% of your checks came back safe. You're mostly spending within your limits.`
 }
 
-function streakLabel(n) {
-  if (n >= 10) return 'Checking first is becoming automatic.'
-  if (n >= 5)  return 'You\'re building the habit of checking first.'
-  if (n >= 2)  return 'Keep checking before you spend.'
-  if (n === 1) return 'Day 1 — check before the next spend.'
-  return 'Start a streak — check before your next spend.'
-}
 
 export default function Insights() {
   const navigate = useNavigate()
@@ -106,6 +100,12 @@ export default function Insights() {
   const daysElapsed = Math.max(0, periodTotal - daysLeft)
   const periodPct   = Math.min(100, Math.round((daysElapsed / periodTotal) * 100))
   const budgetPct   = Math.min(100, Math.round((daysLeft / periodTotal) * 100))
+
+  const rank        = computeRank(streak)
+  const nextRankData = getNextRank(streak)
+  const rankPct     = nextRankData
+    ? Math.max(4, Math.round(((streak - rank.minStreak) / (nextRankData.minStreak - rank.minStreak)) * 100))
+    : 100
 
   const thisWeekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const closeCalls  = history.filter(h => h.decision === 'WAIT' && new Date(h.createdAt) >= thisWeekStart).length
@@ -197,40 +197,56 @@ export default function Insights() {
           </section>
         )}
 
-        {/* Streak */}
+        {/* SmartSpender Rank */}
         <section className={`${ui.card} ${ui.cardPad}`}>
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className={ui.eyebrow}>Streak</div>
-              <div className="mt-3 flex items-baseline gap-1.5">
-                {streak > 0 && <span className="text-lg leading-none select-none">🔥</span>}
-                <span className="text-[34px] font-black leading-none tracking-tight text-white/90">
-                  {streak}
-                </span>
-                <span className="text-sm font-semibold text-white/40">
-                  {streak === 1 ? 'day' : 'days'}
+            <div className="min-w-0">
+              <div className={ui.eyebrow}>Your rank</div>
+              <div className="mt-3 flex items-baseline gap-2">
+                {streak > 0 && <span className="text-xl leading-none select-none">🔥</span>}
+                <span className="text-[28px] font-black leading-tight tracking-tight text-white/95">
+                  {rank.name}
                 </span>
               </div>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-white/55">
-                {streakLabel(streak)}
+              <p className="mt-1.5 text-sm font-semibold leading-relaxed text-white/50">
+                {rank.description}
               </p>
             </div>
-
-            {streak >= 5 && (
-              <div
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] text-2xl"
-              >
-                {streak >= 10 ? '🏆' : '⭐'}
-              </div>
-            )}
+            <div className="flex shrink-0 flex-col items-center gap-0.5 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-4 py-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Level</span>
+              <span className="text-[28px] font-black leading-none text-emerald-400">{rank.level}</span>
+              <span className="text-[10px] font-bold text-white/20">of {RANKS.length}</span>
+            </div>
           </div>
 
-          {streak > 0 && (
-            <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all duration-700"
-                style={{ width: `${Math.min(100, (streak / 10) * 100)}%` }}
-              />
+          <div className="mt-4 flex items-baseline gap-1.5">
+            <span className="text-[34px] font-black leading-none tracking-tight text-white/90">
+              {streak}
+            </span>
+            <span className="text-sm font-semibold text-white/40">
+              {streak === 1 ? 'day' : 'days'}
+            </span>
+          </div>
+
+          {nextRankData ? (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-white/30">
+                <span>{streak} days</span>
+                <span>{nextRankData.minStreak}d — {nextRankData.name}</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-700"
+                  style={{ width: `${rankPct}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-medium text-white/35">
+                {nextRankData.minStreak - streak} more day{nextRankData.minStreak - streak !== 1 ? 's' : ''} to reach {nextRankData.name}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.07] px-3 py-2.5">
+              <p className="text-xs font-bold text-emerald-300">🏆 Maximum rank achieved.</p>
             </div>
           )}
         </section>
@@ -273,7 +289,9 @@ export default function Insights() {
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-[9px] font-bold uppercase tracking-[0.18em] text-white/20">SmartSpend — check before you spend</p>
+              <p className="mt-4 text-[9px] font-bold uppercase tracking-[0.18em] text-white/20">
+                {rank.name} · Lv {rank.level} · SmartSpend
+              </p>
             </div>
           </section>
         )}

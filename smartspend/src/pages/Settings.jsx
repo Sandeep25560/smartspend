@@ -232,10 +232,10 @@ export default function Settings() {
       <div className={ui.stack}>
 
         <header className="mb-2">
-          <div className={ui.eyebrow}>Settings</div>
+          <div className={ui.eyebrow}>Your plan</div>
           <h1 className={`${ui.title} mt-3`}>Keep it true.</h1>
           <p className={`${ui.subtitle} mt-3`}>
-            Update the few things that shape your answer.
+            These numbers power every check. Keep them accurate.
           </p>
         </header>
 

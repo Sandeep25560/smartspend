@@ -13,11 +13,11 @@ function money(value) {
 const PERIOD_DAYS = { Weekly: 7, Biweekly: 14, Monthly: 30, Irregular: null }
 
 function streakLabel(n) {
-  if (n >= 10) return 'You\'re on a roll.'
-  if (n >= 5)  return 'This is becoming a habit.'
-  if (n >= 2)  return 'You\'re getting better at this.'
-  if (n === 1) return 'Day 1 — keep going.'
-  return 'Start a streak with one good call.'
+  if (n >= 10) return 'Checking first is becoming automatic.'
+  if (n >= 5)  return 'You\'re building the habit of checking first.'
+  if (n >= 2)  return 'Keep checking before you spend.'
+  if (n === 1) return 'Day 1 — check before the next spend.'
+  return 'Start a streak — check before your next spend.'
 }
 
 export default function Insights() {

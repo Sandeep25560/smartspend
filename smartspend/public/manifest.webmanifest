@@ -1,7 +1,7 @@
 {
   "name": "SmartSpend",
   "short_name": "SmartSpend",
-  "description": "A real-time spending decision coach.",
+  "description": "Check before you spend. Not after.",
   "start_url": "/home",
   "scope": "/",
   "display": "standalone",

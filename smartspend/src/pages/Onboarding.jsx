@@ -49,7 +49,7 @@ export default function Onboarding() {
         onboardingCompleted: true,
       })
       setUser(user)
-      setStep(4)
+      setStep(5)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -84,10 +84,11 @@ export default function Onboarding() {
   }
 
   const stepMeta = [
-    { n: 1, label: 'Balance' },
-    { n: 2, label: 'Payday' },
-    { n: 3, label: 'Pay cycle' },
-    { n: 4, label: 'Reminders' },
+    { n: 1, label: 'How it works' },
+    { n: 2, label: 'Balance' },
+    { n: 3, label: 'Payday' },
+    { n: 4, label: 'Pay cycle' },
+    { n: 5, label: 'Reminders' },
   ]
 
   return (
@@ -102,7 +103,7 @@ export default function Onboarding() {
         {/* Progress */}
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-bold tracking-[0.22em] uppercase text-emerald-400">SmartSpend</span>
-          <span className="text-xs font-semibold text-white/30">{step} of 4</span>
+          <span className="text-xs font-semibold text-white/30">{step} of 5</span>
         </div>
         <div className="mb-10 flex gap-1.5">
           {stepMeta.map(({ n }) => (
@@ -122,8 +123,50 @@ export default function Onboarding() {
 
         <div className="flex-1 flex flex-col">
 
-          {/* Step 1 — Balance */}
+          {/* Step 1 — How it works */}
           {step === 1 && (
+            <div className="animate-fadeUp flex flex-1 flex-col">
+              <div className="flex-1 flex flex-col justify-center">
+                <h2 className="mb-3 text-[32px] font-black leading-tight tracking-tight text-white">
+                  Check before<br />you spend.
+                </h2>
+                <p className="mb-8 text-[16px] font-medium leading-relaxed text-white/50">
+                  Next time you're about to buy something — open SmartSpend first. Type the amount. Get YES or NO in 2 seconds.
+                </p>
+
+                <div className="flex flex-col gap-2 mb-8">
+                  <div className="flex items-center gap-3.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-3.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" style={{ boxShadow: '0 0 8px rgba(52,211,153,0.5)' }} />
+                    <span className="text-sm font-black text-white/85">Coffee run — $25</span>
+                    <span className="ml-auto text-sm font-black text-emerald-400">YES</span>
+                  </div>
+                  <div className="flex items-center gap-3.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] px-4 py-3.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" style={{ boxShadow: '0 0 8px rgba(251,191,36,0.5)' }} />
+                    <span className="text-sm font-black text-white/85">New shoes — $89</span>
+                    <span className="ml-auto text-sm font-black text-amber-400">WAIT</span>
+                  </div>
+                  <div className="flex items-center gap-3.5 rounded-2xl border border-rose-500/20 bg-rose-500/[0.07] px-4 py-3.5">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-rose-400" style={{ boxShadow: '0 0 8px rgba(248,113,113,0.5)' }} />
+                    <span className="text-sm font-black text-white/85">Concert tickets — $180</span>
+                    <span className="ml-auto text-sm font-black text-rose-400">NO</span>
+                  </div>
+                </div>
+
+                <p className="text-[13px] font-semibold text-white/30">
+                  Not after. Not in a monthly review. Before — at the moment it counts.
+                </p>
+              </div>
+              <button
+                onClick={() => setStep(2)}
+                className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98]"
+              >
+                Set it up — takes 60 seconds
+              </button>
+            </div>
+          )}
+
+          {/* Step 2 — Balance */}
+          {step === 2 && (
             <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
@@ -144,13 +187,13 @@ export default function Onboarding() {
                     value={balance}
                     onChange={e => setBalance(e.target.value)}
                     placeholder="500"
-                    onKeyDown={e => e.key === 'Enter' && balance && setStep(2)}
+                    onKeyDown={e => e.key === 'Enter' && balance && setStep(3)}
                     className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] px-12 py-5 text-center text-5xl font-black text-white outline-none transition-all duration-200 placeholder:text-white/20 focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
                   />
                 </div>
               </div>
               <button
-                onClick={() => balance && setStep(2)}
+                onClick={() => balance && setStep(3)}
                 disabled={!balance}
                 className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-25 disabled:hover:scale-100"
               >
@@ -159,8 +202,8 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 2 — Payday */}
-          {step === 2 && (
+          {/* Step 3 — Payday */}
+          {step === 3 && (
             <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
@@ -176,14 +219,14 @@ export default function Onboarding() {
               </div>
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => payday && setStep(3)}
+                  onClick={() => payday && setStep(4)}
                   disabled={!payday}
                   className="w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-25 disabled:hover:scale-100"
                 >
                   Continue
                 </button>
                 <button
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60 active:scale-[0.98]"
                 >
                   Back
@@ -192,8 +235,8 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 3 — Frequency */}
-          {step === 3 && (
+          {/* Step 4 — Frequency */}
+          {step === 4 && (
             <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
@@ -242,7 +285,7 @@ export default function Onboarding() {
                     : "Let's go"}
                 </button>
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="py-3 text-sm font-semibold text-white/35 transition-colors duration-200 hover:text-white/60 active:scale-[0.98]"
                 >
                   Back
@@ -251,8 +294,8 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 4 — Notifications */}
-          {step === 4 && (
+          {/* Step 5 — Notifications */}
+          {step === 5 && (
             <div className="animate-fadeUp flex flex-1 flex-col">
               <div className="flex-1">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-emerald-400">

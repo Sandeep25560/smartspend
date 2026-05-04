@@ -121,8 +121,8 @@ function withStreak(user, streak) {
 }
 
 function confidenceFor(streak) {
-  if (streak >= 5) return 'This is becoming a habit.'
-  if (streak >= 2) return "You're getting better at this."
+  if (streak >= 5) return 'Checking first is becoming automatic.'
+  if (streak >= 2) return 'Keep checking before you spend.'
   return ''
 }
 
@@ -991,13 +991,13 @@ export default function Home() {
                   <span className="text-base leading-none select-none">🔥</span>
                   <div className="min-w-0">
                     <span className="text-sm font-bold text-emerald-300">
-                      Day {currentStreak(user)}
+                      {currentStreak(user)}-day check streak
                     </span>
                     <span className="ml-1.5 text-xs font-medium text-white/45">
                       {currentStreak(user) >= 5
-                        ? '— this is becoming a habit.'
+                        ? '— checking first is becoming automatic.'
                         : currentStreak(user) >= 2
-                          ? "— you're getting better at this."
+                          ? '— keep checking before you spend.'
                           : '— keep it going.'}
                     </span>
                   </div>
@@ -1060,7 +1060,7 @@ export default function Home() {
             className="animate-riseIn mt-6 py-3 text-center text-sm font-medium opacity-50 transition-all duration-200 hover:scale-[1.02] hover:opacity-80 active:scale-[0.98]"
             style={{ color: '#a1a1aa' }}
           >
-            Try a different amount
+            Check another amount
           </button>
         )}
 

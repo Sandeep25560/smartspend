@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SmartSpend.Api.BackgroundServices;
@@ -78,6 +79,7 @@ app.UseExceptionHandler(errorApp =>
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    EnsureSqliteDirectoryExists(ctx.Database.GetConnectionString());
     ctx.Database.EnsureCreated();
     app.Services.GetRequiredService<VapidKeyService>(); // warm up VAPID keys
 }
@@ -87,3 +89,20 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
+
+static void EnsureSqliteDirectoryExists(string? connectionString)
+{
+    if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+    var builder = new SqliteConnectionStringBuilder(connectionString);
+    var dataSource = builder.DataSource;
+
+    if (string.IsNullOrWhiteSpace(dataSource) || dataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase))
+        return;
+
+    var directory = Path.GetDirectoryName(Path.GetFullPath(dataSource));
+    if (!string.IsNullOrWhiteSpace(directory))
+    {
+        Directory.CreateDirectory(directory);
+    }
+}

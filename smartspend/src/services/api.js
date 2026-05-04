@@ -176,11 +176,15 @@ export async function getProfile() {
 }
 
 export async function updateProfile(data) {
-  return request(`${BASE}/user/profile`, {
+  const result = await request(`${BASE}/user/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(data),
   }, 'Could not save your setup. Please retry.')
+  if (data.balance !== undefined || data.cardBalance !== undefined || data.cashBalance !== undefined) {
+    localStorage.setItem('ss_balance_updated_at', String(Date.now()))
+  }
+  return result
 }
 
 export async function joinSharedPlan(code) {

@@ -12,6 +12,28 @@ function money(value) {
 
 const PERIOD_DAYS = { Weekly: 7, Biweekly: 14, Monthly: 30, Irregular: null }
 
+function computePersonality(history) {
+  if (history.length < 3) return null
+  const bad = history.filter(h => h.spent)
+  const good = history.filter(h => !h.spent)
+  if (bad.length === 0) {
+    return `You've made ${good.length} smart call${good.length !== 1 ? 's' : ''} without overspending. Checking first is working.`
+  }
+  const dayCount = {}
+  bad.forEach(h => { const d = new Date(h.createdAt).getDay(); dayCount[d] = (dayCount[d] || 0) + 1 })
+  const fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const weekendBad = bad.filter(h => { const d = new Date(h.createdAt).getDay(); return d === 0 || d === 6 }).length
+  const weekendPct = Math.round((weekendBad / bad.length) * 100)
+  const eveningBad = bad.filter(h => new Date(h.createdAt).getHours() >= 18).length
+  const eveningPct = Math.round((eveningBad / bad.length) * 100)
+  const worstDay = Object.entries(dayCount).sort((a, b) => b[1] - a[1])[0]
+  const ratio = Math.round((good.length / history.length) * 100)
+  if (weekendPct >= 60) return `You're a weekend spender — ${weekendPct}% of your passes happen Fri–Sun. Tighten up those days.`
+  if (eveningPct >= 60) return `Evenings are your weak spot — ${eveningPct}% of your passes happen after 6pm.`
+  if (worstDay && parseInt(worstDay[1]) >= 2) return `${fullDays[parseInt(worstDay[0])]}s are your hardest day — that's when most passes happen.`
+  return `${ratio}% of your checks came back safe. You're mostly spending within your limits.`
+}
+
 function streakLabel(n) {
   if (n >= 10) return 'Checking first is becoming automatic.'
   if (n >= 5)  return 'You\'re building the habit of checking first.'
@@ -84,6 +106,13 @@ export default function Insights() {
   const daysElapsed = Math.max(0, periodTotal - daysLeft)
   const periodPct   = Math.min(100, Math.round((daysElapsed / periodTotal) * 100))
   const budgetPct   = Math.min(100, Math.round((daysLeft / periodTotal) * 100))
+
+  const thisWeekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const closeCalls  = history.filter(h => h.decision === 'WAIT' && new Date(h.createdAt) >= thisWeekStart).length
+  const goodCalls   = history.filter(h => !h.spent).length
+  const badCalls    = history.filter(h => h.spent).length
+  const savedAmount = history.filter(h => !h.spent).reduce((sum, h) => sum + h.amount, 0)
+  const personality = computePersonality(history)
 
   return (
     <AppShell tint={theme.tint}>
@@ -205,6 +234,49 @@ export default function Insights() {
             </div>
           )}
         </section>
+
+        {/* Your pattern — personality + close calls */}
+        {personality && (
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <div className={ui.eyebrow}>Your pattern</div>
+            <p className="mt-3 text-[15px] font-semibold leading-relaxed text-white/80">{personality}</p>
+            {closeCalls > 0 && (
+              <p className="mt-2 text-sm font-medium text-amber-300/70">
+                {closeCalls} close call{closeCalls !== 1 ? 's' : ''} this week — you nearly went over.
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* This period — shareable survival card */}
+        {history.length >= 3 && (
+          <section className={`${ui.card} ${ui.cardPad}`}>
+            <div className="flex items-center justify-between">
+              <div className={ui.eyebrow}>This period</div>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/20">Screenshot to share</span>
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent px-5 py-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.20em] text-white/30">Payday survival</p>
+              <p className="mt-3 text-[22px] font-black leading-tight tracking-tight text-white">
+                {daysElapsed}d down, {daysLeft}d to go
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-emerald-300">{money(safeDay)}/day budget</p>
+              <div className="mt-5 grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Smart calls', value: goodCalls, color: '#34d399' },
+                  { label: 'Passes', value: badCalls, color: '#f87171' },
+                  { label: 'Kept', value: money(savedAmount), color: 'rgba(255,255,255,0.80)' },
+                ].map(({ label, value, color }) => (
+                  <div key={label}>
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-white/25">{label}</div>
+                    <div className="mt-1 text-[18px] font-black leading-none" style={{ color }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-[9px] font-bold uppercase tracking-[0.18em] text-white/20">SmartSpend — check before you spend</p>
+            </div>
+          </section>
+        )}
 
         {/* Spending history */}
         <section className={`${ui.card} ${ui.cardPad}`}>

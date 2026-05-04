@@ -53,6 +53,9 @@ export default function Settings() {
   const [shareSaving, setShareSaving] = useState(false)
   const [shareError, setShareError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [goalName, setGoalName] = useState(localStorage.getItem('ss_goal_name') || '')
+  const [goalAmount, setGoalAmount] = useState(localStorage.getItem('ss_goal_amount') || '')
+  const [goalSaved, setGoalSaved] = useState(false)
 
   const minDate = new Date()
   minDate.setDate(minDate.getDate() + 1)
@@ -522,6 +525,70 @@ export default function Settings() {
         <section className="flex flex-col gap-2">
           <div className={ui.eyebrow}>Notifications</div>
           <NotificationCard />
+        </section>
+
+        {/* Savings goal */}
+        <section className="flex flex-col gap-2">
+          <div className={ui.eyebrow}>Savings goal</div>
+          <div className={`${ui.card} ${ui.cardPad}`}>
+            <p className="text-sm font-black text-white/90">What are you saving toward?</p>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-white/50">
+              When the app says NO or WAIT, it'll remind you what you're protecting this money for.
+            </p>
+            <div className="mt-4 flex flex-col gap-3">
+              <input
+                type="text"
+                value={goalName}
+                onChange={e => setGoalName(e.target.value)}
+                maxLength={40}
+                placeholder="e.g. PS5, holiday, new phone"
+                className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white outline-none transition-all duration-200 placeholder:text-white/25 focus:border-emerald-400/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-emerald-400/25"
+              />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-white/35">$</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={goalAmount}
+                  onChange={e => setGoalAmount(e.target.value)}
+                  placeholder="Target amount (optional)"
+                  className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] py-3 pl-7 pr-4 text-sm font-semibold text-white outline-none transition-all duration-200 placeholder:text-white/25 focus:border-emerald-400/60 focus:bg-white/[0.07] focus:ring-1 focus:ring-emerald-400/25"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (goalName.trim()) {
+                      localStorage.setItem('ss_goal_name', goalName.trim())
+                      localStorage.setItem('ss_goal_amount', goalAmount)
+                    } else {
+                      localStorage.removeItem('ss_goal_name')
+                      localStorage.removeItem('ss_goal_amount')
+                    }
+                    setGoalSaved(true)
+                    setTimeout(() => setGoalSaved(false), 2200)
+                  }}
+                  className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.12] px-4 py-3 text-sm font-black text-emerald-300 transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-500/[0.18] active:scale-[0.98]"
+                >
+                  {goalSaved ? '✓ Saved' : 'Save goal'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem('ss_goal_name')
+                    localStorage.removeItem('ss_goal_amount')
+                    setGoalName('')
+                    setGoalAmount('')
+                  }}
+                  disabled={!goalName && !goalAmount}
+                  className="rounded-2xl border border-white/[0.09] bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/50 transition-all duration-200 hover:bg-white/[0.08] hover:text-white/70 active:scale-[0.98] disabled:opacity-30"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* Sign out + delete */}

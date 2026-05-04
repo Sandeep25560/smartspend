@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { updateProfile } from '../services/api'
 import { useUser } from '../context/UserContext'
 import DatePicker from '../components/DatePicker'
-import { daysUntilPayday } from '../utils/decisionHelpers'
+import { daysUntilPayday, computeDecision } from '../utils/decisionHelpers'
 import { enablePush, isPushSupported, isIOS, isStandalone } from '../services/pushNotifications'
 
 const FREQUENCIES = [
@@ -17,6 +17,7 @@ export default function Onboarding() {
   const navigate  = useNavigate()
   const { setUser } = useUser()
   const [step, setStep]   = useState(1)
+  const [demoAmount, setDemoAmount] = useState('')
   const [balance, setBalance] = useState('')
   const [payday,  setPayday]  = useState('')
   const [frequency, setFreq]  = useState('Monthly')
@@ -155,6 +156,38 @@ export default function Onboarding() {
                 <p className="text-[13px] font-semibold text-white/30">
                   Not after. Not in a monthly review. Before — at the moment it counts.
                 </p>
+
+                <div className="mt-6 border-t border-white/[0.07] pt-5">
+                  <p className="mb-3 text-[13px] font-semibold text-white/40">Try it — type any amount:</p>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-white/30">$</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={demoAmount}
+                      onChange={e => setDemoAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] py-4 pl-10 pr-4 text-xl font-black text-white outline-none placeholder:text-white/20 focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
+                    />
+                  </div>
+                  {(() => {
+                    const n = parseFloat(demoAmount)
+                    if (!n || n <= 0) return null
+                    const fakePay = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                    const { status } = computeDecision(500, fakePay, n, 0)
+                    const cfg = {
+                      safe:    { border: 'border-emerald-500/20', bg: 'bg-emerald-500/[0.07]', color: 'text-emerald-400', word: 'YES' },
+                      careful: { border: 'border-amber-500/20',   bg: 'bg-amber-500/[0.07]',   color: 'text-amber-400',   word: 'WAIT' },
+                      stop:    { border: 'border-rose-500/20',    bg: 'bg-rose-500/[0.07]',    color: 'text-rose-400',    word: 'NO' },
+                    }[status]
+                    return (
+                      <div className={`mt-3 flex items-center justify-between rounded-2xl border px-4 py-3.5 ${cfg.border} ${cfg.bg}`}>
+                        <span className="text-sm font-black text-white/75">${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                        <span className={`text-xl font-black ${cfg.color}`}>{cfg.word}</span>
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
               <button
                 onClick={() => setStep(2)}

@@ -147,7 +147,10 @@ export default function Home() {
   const [pageError, setPageError]     = useState('')
   const [paydayPrompt, setPaydayPrompt] = useState(false)
   const [newPayday, setNewPayday]     = useState('')
+  const [newBalance, setNewBalance]   = useState('')
   const [paydaySaving, setPaydaySaving] = useState(false)
+  const [celebrating, setCelebrating] = useState(null)
+  const [stalenessConfirmed, setStalenessConfirmed] = useState(false)
   const [decisionError, setDecisionError] = useState('')
   const [actionError, setActionError] = useState('')
   const [amount, setAmount] = useState('')
@@ -539,6 +542,13 @@ export default function Home() {
   const daysElapsed  = Math.max(0, periodTotal - daysLeft)
   const periodPct    = Math.min(98, Math.round((daysElapsed / periodTotal) * 100))
 
+  const balanceUpdatedMs = parseInt(localStorage.getItem('ss_balance_updated_at') || '0')
+  const referenceMs = balanceUpdatedMs || (user?.createdAt ? new Date(user.createdAt).getTime() : Date.now())
+  const stalenessDays = Math.floor((Date.now() - referenceMs) / 86400000)
+  const showStaleness = stalenessDays >= 3 && !paydayPassed && !stalenessConfirmed && !!user?.nextPayday
+
+  const goalName = localStorage.getItem('ss_goal_name') || ''
+
   async function switchPot(pot) {
     if (potSaving || pot === activePot) return
 
@@ -575,21 +585,31 @@ export default function Home() {
     }
   }
 
-  async function saveNewPayday() {
+  async function savePaydayReset() {
     if (!newPayday) return
     setPaydaySaving(true)
+    const parsedBalance = parseFloat(newBalance)
+    const hasNewBalance = Number.isFinite(parsedBalance) && parsedBalance >= 0
     try {
-      const u = await updateProfile({
-        balance: user.balance,
+      const payload = {
         nextPayday: new Date(`${newPayday}T12:00:00`).toISOString(),
         payFrequency: user.payFrequency,
         onboardingCompleted: true,
-      })
+      }
+      if (hasNewBalance) {
+        if (activePot === 'cash') payload.cashBalance = parsedBalance
+        else payload.cardBalance = parsedBalance
+      }
+      const u = await updateProfile(payload)
       setUser(u)
       setPaydayPrompt(false)
       setNewPayday('')
+      setNewBalance('')
+      const dL = Math.max(1, daysUntilPayday(u.nextPayday))
+      const spd = Math.max(0, (u.balance ?? 0) - (u.upcomingExpensesTotal ?? 0)) / dL
+      setCelebrating({ balance: u.balance ?? 0, safePerDay: spd, nextPayday: u.nextPayday })
     } catch {
-      // silent — user can try again or navigate to Settings
+      // silent — user can try again
     } finally {
       setPaydaySaving(false)
     }
@@ -598,33 +618,81 @@ export default function Home() {
   return (
     <div className={ui.screen}>
 
-      {/* Payday auto-advance prompt — shown when nextPayday has passed */}
-      {!loading && paydayPassed && paydayPrompt && (
-        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#0b0f1a]/96 px-6 pt-16 pb-10 backdrop-blur-sm">
+      {/* Celebration overlay — shown after "I just got paid" flow */}
+      {celebrating && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0b0f1a]/98 px-6 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-md animate-fadeIn text-center">
+            <p className="text-[60px] leading-none select-none">🎉</p>
+            <h2 className="mt-5 text-[30px] font-black leading-tight tracking-tight text-white">
+              You made it.
+            </h2>
+            <p className="mt-3 text-[18px] font-bold text-white/70">
+              ${celebrating.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} fresh.
+            </p>
+            <p className="mt-1 text-[18px] font-bold text-emerald-300">
+              ${Math.round(celebrating.safePerDay)} safe per day
+              {celebrating.nextPayday
+                ? ` until ${new Date(celebrating.nextPayday).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+                : ''}.
+            </p>
+            <button
+              onClick={() => setCelebrating(null)}
+              className="mt-8 w-full rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.20)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98]"
+            >
+              Let's go →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* "I just got paid" modal — shown when payday has passed */}
+      {!loading && paydayPassed && paydayPrompt && !celebrating && (
+        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#0b0f1a]/96 px-6 pt-14 pb-10 backdrop-blur-sm">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-6">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400">Action needed</span>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400">Payday</span>
               <h2 className="mt-2 text-[28px] font-black leading-tight tracking-tight text-white">
-                Payday has passed.<br />When's the next one?
+                You got paid.<br />Let's reset.
               </h2>
               <p className="mt-2 text-[15px] font-medium text-white/45">
-                Your answers won't be accurate until this is updated.
+                Update your numbers so every check is accurate again.
               </p>
             </div>
-            <DatePicker
-              value={newPayday}
-              onChange={setNewPayday}
-              minDate={new Date().toISOString().split('T')[0]}
-            />
-            <div className="mt-4 flex flex-col gap-2">
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-white/40">How much landed?</p>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-light text-white/30">$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={newBalance}
+                    onChange={e => setNewBalance(e.target.value)}
+                    placeholder="0"
+                    className="w-full rounded-2xl border border-white/[0.09] bg-white/[0.05] py-4 pl-10 pr-4 text-2xl font-black text-white outline-none transition-all duration-200 placeholder:text-white/20 focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/25 [color-scheme:dark]"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-white/40">Next payday?</p>
+                <DatePicker
+                  value={newPayday}
+                  onChange={setNewPayday}
+                  minDate={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2">
               <button
-                onClick={saveNewPayday}
+                onClick={savePaydayReset}
                 disabled={!newPayday || paydaySaving}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-[15px] font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.16)] transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100"
               >
                 {paydaySaving
                   ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  : 'Update payday'}
+                  : "I'm set — let's go"}
               </button>
               <button
                 onClick={() => setPaydayPrompt(false)}
@@ -684,17 +752,39 @@ export default function Home() {
         )}
 
         {paydayPassed && (
-          <div className="animate-fadeIn mb-5 flex items-start justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3.5">
+          <div className="animate-fadeIn mb-5 flex items-start justify-between gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.07] px-4 py-3.5">
             <div>
-              <p className="text-sm font-bold text-amber-300">Your payday has passed.</p>
-              <p className="mt-0.5 text-xs font-medium text-white/50">Update your settings so your answers stay accurate.</p>
+              <p className="text-sm font-bold text-emerald-300">Payday has arrived.</p>
+              <p className="mt-0.5 text-xs font-medium text-white/50">Update your numbers to keep checks accurate.</p>
             </div>
             <button
-              onClick={() => navigate('/settings')}
-              className="shrink-0 rounded-xl bg-amber-400/20 px-3 py-1.5 text-xs font-bold text-amber-300 transition-all duration-200 hover:bg-amber-400/30 active:scale-[0.98]"
+              onClick={() => setPaydayPrompt(true)}
+              className="shrink-0 rounded-xl bg-emerald-400/20 px-3 py-1.5 text-xs font-bold text-emerald-300 transition-all duration-200 hover:bg-emerald-400/30 active:scale-[0.98]"
             >
-              Update
+              I just got paid
             </button>
+          </div>
+        )}
+
+        {showStaleness && (
+          <div className="animate-fadeIn mb-5 flex items-center justify-between gap-3 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-4 py-3">
+            <p className="text-xs font-semibold text-white/50">
+              Balance from {stalenessDays} day{stalenessDays !== 1 ? 's' : ''} ago. Still accurate?
+            </p>
+            <div className="flex shrink-0 gap-1.5">
+              <button
+                onClick={() => { localStorage.setItem('ss_balance_updated_at', String(Date.now())); setStalenessConfirmed(true) }}
+                className="rounded-xl border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-xs font-bold text-white/55 transition-all duration-150 hover:bg-white/[0.09] hover:text-white/80 active:scale-[0.97]"
+              >
+                Looks right
+              </button>
+              <button
+                onClick={() => navigate('/settings')}
+                className="rounded-xl border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-xs font-bold text-white/55 transition-all duration-150 hover:bg-white/[0.09] hover:text-white/80 active:scale-[0.97]"
+              >
+                Update
+              </button>
+            </div>
           </div>
         )}
 
@@ -902,6 +992,15 @@ export default function Home() {
                   style={{ animationDelay: '120ms' }}
                 >
                   Wait {daysAffordable} {daysAffordable === 1 ? 'day' : 'days'} and this fits your budget.
+                </p>
+              )}
+
+              {(status === 'stop' || status === 'careful') && goalName && parseFloat(amount) > 0 && (
+                <p
+                  className="animate-messageIn mt-2 text-sm font-semibold"
+                  style={{ color: 'rgba(52,211,153,0.65)', animationDelay: '160ms' }}
+                >
+                  Skip this — ${Math.round(parseFloat(amount))} closer to {goalName}.
                 </p>
               )}
 

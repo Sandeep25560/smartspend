@@ -103,15 +103,29 @@ public class DailyNotificationService(
 
         foreach (var user in users)
         {
-            if (!user.NextPayday.HasValue) continue;
-            var result = decisionService.DailyStatus(user.Balance, user.NextPayday.Value);
-            var (title, body) = (result.Status, isWeekend) switch
+            string title, body;
+
+            if (!user.NextPayday.HasValue)
+                continue;
+
+            var paydayPassed = user.NextPayday.Value.Date < DateTime.UtcNow.Date;
+
+            if (paydayPassed)
             {
-                ("SAFE",    true)  => ("SmartSpend", $"Weekends get expensive. Stay under ${result.SafePerDay:F0} today."),
-                ("SAFE",    false) => ("SmartSpend", $"You can spend ${result.SafePerDay:F0} today"),
-                ("CAREFUL", true)  => ("SmartSpend", $"Weekend budget: ${result.SafePerDay:F0}. Don't push it."),
-                _                  => ("SmartSpend", "Today is tight — be careful"),
-            };
+                title = "SmartSpend";
+                body  = "Your payday has passed — open the app to set your next one.";
+            }
+            else
+            {
+                var result = decisionService.DailyStatus(user.Balance, user.NextPayday.Value);
+                (title, body) = (result.Status, isWeekend) switch
+                {
+                    ("SAFE",    true)  => ("SmartSpend", $"Weekends get expensive. You have ${result.SafePerDay:F0} safe today."),
+                    ("SAFE",    false) => ("SmartSpend", $"You have ${result.SafePerDay:F0} safe to spend today."),
+                    ("CAREFUL", true)  => ("SmartSpend", $"Weekend budget: ${result.SafePerDay:F0}. Don't push it."),
+                    _                  => ("SmartSpend", "Today is tight — be careful."),
+                };
+            }
 
             foreach (var sub in user.Subscriptions)
             {

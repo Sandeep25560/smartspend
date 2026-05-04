@@ -13,6 +13,8 @@ smartspend/.env.*
 smartspend-api/bin/
 smartspend-api/obj/
 smartspend-api/smartspend.db
+smartspend-api/smartspend.db-shm
+smartspend-api/smartspend.db-wal
 smartspend-api/vapid.json
 smartspend-api/.env
 smartspend-api/.env.*

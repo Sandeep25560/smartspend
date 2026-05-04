@@ -58,30 +58,32 @@ function toLocalDate(value) {
   return new Date(value)
 }
 
-export function computeDecision(balance, nextPayday, amount) {
-  const rawDaysLeft = daysUntilPayday(nextPayday)
-  const daysLeft   = Math.max(1, rawDaysLeft)
-  const safePerDay = Math.max(0, balance) / daysLeft
-  const impactDays = safePerDay > 0 ? amount / safePerDay : 0
-  const status     = rawDaysLeft <= 0          ? 'stop'
-                   : balance <= 0              ? 'stop'
-                   : amount > balance          ? 'stop'
-                   : amount > safePerDay * 1.3 ? 'stop'
-                   : amount > safePerDay       ? 'careful'
-                   : 'safe'
+export function computeDecision(balance, nextPayday, amount, upcomingExpenses = 0) {
+  const rawDaysLeft    = daysUntilPayday(nextPayday)
+  const daysLeft       = Math.max(1, rawDaysLeft)
+  const effectiveBal   = Math.max(0, balance - upcomingExpenses)
+  const safePerDay     = effectiveBal / daysLeft
+  const impactDays     = safePerDay > 0 ? amount / safePerDay : 0
+  const status         = rawDaysLeft <= 0          ? 'stop'
+                       : balance <= 0              ? 'stop'
+                       : amount > balance          ? 'stop'
+                       : amount > safePerDay * 1.3 ? 'stop'
+                       : amount > safePerDay       ? 'careful'
+                       : 'safe'
   return { status, safePerDay, daysLeft, impactDays }
 }
 
-export function todayStatus(balance, nextPayday) {
+export function todayStatus(balance, nextPayday, upcomingExpenses = 0) {
   if (!nextPayday) return 'safe'
   if (daysUntilPayday(nextPayday) <= 0 || balance <= 0) return 'stop'
-  const { status } = computeDecision(balance, nextPayday, dailySafeAmount(balance, nextPayday) * 0.8)
+  const { status } = computeDecision(balance, nextPayday, dailySafeAmount(balance, nextPayday, upcomingExpenses) * 0.8, upcomingExpenses)
   return status
 }
 
-export function dailySafeAmount(balance, nextPayday) {
-  const daysLeft = Math.max(1, daysUntilPayday(nextPayday))
-  return Math.max(0, balance) / daysLeft
+export function dailySafeAmount(balance, nextPayday, upcomingExpenses = 0) {
+  const daysLeft      = Math.max(1, daysUntilPayday(nextPayday))
+  const effectiveBal  = Math.max(0, balance - upcomingExpenses)
+  return effectiveBal / daysLeft
 }
 
 export function daysUntilPayday(nextPayday) {

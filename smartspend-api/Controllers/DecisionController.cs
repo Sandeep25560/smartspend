@@ -10,7 +10,7 @@ namespace SmartSpend.Api.Controllers;
 [ApiController]
 [Route("api/decision")]
 [Authorize]
-public class DecisionController(AppDbContext db, DecisionService svc) : ControllerBase
+public class DecisionController(AppDbContext db, DecisionService svc, FinancePlanService plans) : ControllerBase
 {
     private Guid Uid => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -22,16 +22,23 @@ public class DecisionController(AppDbContext db, DecisionService svc) : Controll
         if (req.Amount <= 0 || double.IsNaN(req.Amount) || double.IsInfinity(req.Amount))
             return BadRequest(new { error = "Amount must be positive." });
 
-        var user = await db.Users.FindAsync(Uid);
+        var user = await db.Users
+            .Include(u => u.RecurringExpenses)
+            .Include(u => u.FinancePlan).ThenInclude(p => p!.RecurringExpenses)
+            .FirstOrDefaultAsync(u => u.Id == Uid);
         if (user is null) return NotFound();
-        if (!user.NextPayday.HasValue)
+        var plan = await plans.EnsurePlanAsync(user, HttpContext.RequestAborted);
+        var balance = FinancePlanService.BalanceFor(plan);
+
+        if (!plan.NextPayday.HasValue)
             return BadRequest(new { error = "Complete onboarding first." });
-        if (user.Balance < 0)
+        if (balance < 0)
             return BadRequest(new { error = "Balance cannot be negative." });
-        if ((user.NextPayday.Value.Date - DateTime.UtcNow.Date).Days <= 0)
+        if ((plan.NextPayday.Value.Date - DateTime.UtcNow.Date).Days <= 0)
             return BadRequest(new { error = "Your payday has passed. Update it." });
 
-        var r = svc.Evaluate(user.Balance, user.NextPayday.Value, req.Amount);
+        var upcomingExpenses = BudgetMath.UpcomingExpensesTotal(plan.RecurringExpenses, plan.NextPayday);
+        var r = svc.Evaluate(balance, plan.NextPayday.Value, req.Amount, upcomingExpenses);
 
         return Ok(new
         {
@@ -40,6 +47,7 @@ public class DecisionController(AppDbContext db, DecisionService svc) : Controll
             r.SafePerDay,
             r.DaysLeft,
             r.Balance,
+            UpcomingExpensesTotal = upcomingExpenses,
             r.ImpactDays,
             action = r.Status switch
             {

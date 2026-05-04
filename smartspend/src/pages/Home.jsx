@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { notifyDecision, recordAction, updateProfile } from '../services/api'
+import { recordAction, updateProfile, updateActionTag, scheduleDecisionPrompt, cancelDecisionPrompt } from '../services/api'
 import { isSubscribed } from '../services/pushNotifications'
 import { useUser } from '../context/UserContext'
 import {
@@ -60,6 +60,12 @@ function haptic(ms = 8) {
   if (navigator.vibrate) navigator.vibrate(ms)
 }
 
+function makeRequestId() {
+  return crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const PERIOD_DAYS = { Weekly: 7, Biweekly: 14, Monthly: 30, Irregular: null }
+
 const emptyDecisionState = {
   amount: '',
   status: null,
@@ -68,6 +74,7 @@ const emptyDecisionState = {
   timerStarted: false,
   promptMode: 'hidden',
   requestId: '',
+  lastActionId: null,
   capturedSafePerDay: 0,
   capturedNewSafePerDay: 0,
   capturedBalance: 0,
@@ -151,6 +158,7 @@ export default function Home() {
   const [inputFocused, setInputFocused] = useState(false)
   const [decisionState, setDecisionState] = useState(emptyDecisionState)
   const [actionLoading, setActionLoading] = useState(false)
+  const [potSaving, setPotSaving] = useState(false)
   const inputRef = useRef(null)
   const bumpTimer = useRef(null)
   const actionTimer = useRef(null)
@@ -205,9 +213,14 @@ export default function Home() {
     setActionLoading(false)
 
     if (!status || !parseFloat(amount)) {
+      const previousRequestId = decisionStateRef.current.requestId
+      if (previousRequestId) cancelDecisionPrompt(previousRequestId).catch(() => {})
       setDecisionState(emptyDecisionState)
       return undefined
     }
+
+    const requestId = makeRequestId()
+    const numericAmount = parseFloat(amount)
 
     setDecisionState({
       amount,
@@ -216,7 +229,8 @@ export default function Home() {
       spent: null,
       timerStarted: true,
       promptMode: 'immediate',
-      requestId: crypto.randomUUID(),
+      requestId,
+      lastActionId: null,
       capturedSafePerDay: 0,
       capturedNewSafePerDay: 0,
       capturedBalance: 0,
@@ -226,19 +240,18 @@ export default function Home() {
       streakIncreased: false,
     })
 
-    actionTimer.current = setTimeout(() => {
-      // Send "Did you spend $X?" notification if subscribed and user hasn't responded in-app
-      const snap = decisionStateRef.current
-      if (
-        snap.amount === amount &&
-        snap.status === status &&
-        !snap.responded &&
-        snap.promptMode !== 'hidden' &&
-        isSubscribed()
-      ) {
-        notifyDecision(parseFloat(amount)).catch(() => {})
-      }
+    if (isSubscribed()) {
+      scheduleDecisionPrompt(
+        numericAmount,
+        requestId,
+        DEC[status]?.word ?? status,
+        ACTION_PROMPT_DELAY / 1000,
+        userRef.current?.activePot ?? 'card'
+      )
+        .catch(() => {})
+    }
 
+    actionTimer.current = setTimeout(() => {
       setDecisionState(current => {
         if (
           current.amount !== amount ||
@@ -293,9 +306,13 @@ export default function Home() {
 
     const dL = snap?.nextPayday ? Math.max(1, daysUntilPayday(snap.nextPayday)) : 1
     const currentBalance = snap?.balance ?? 0
-    const spd = snap ? currentBalance / dL : 0
+    const upcomingExpenses = snap?.upcomingExpensesTotal ?? 0
+    const effectiveBalance = Math.max(0, currentBalance - upcomingExpenses)
+    const spd = snap ? effectiveBalance / dL : 0
     const optimisticBalance = spent ? Math.max(0, currentBalance - (numAmount || 0)) : currentBalance
-    const optimisticNewSafePerDay = dL > 0 ? optimisticBalance / dL : 0
+    const optimisticNewSafePerDay = dL > 0
+      ? Math.max(0, optimisticBalance - upcomingExpenses) / dL
+      : 0
     const previousStreak = currentStreak(snap)
     const goodRestraint = !spent && currentDecision.status !== 'safe'
     const optimisticStreak = spent ? 0 : goodRestraint ? previousStreak + 1 : previousStreak
@@ -328,7 +345,7 @@ export default function Home() {
     })
 
     if (numAmount > 0 && snap) {
-      recordAction(numAmount, spent, isSubscribed(), currentDecision.requestId || null)
+      recordAction(numAmount, spent, false, currentDecision.requestId || null, null, snap.activePot ?? 'card')
         .then(result => {
           if (!result) return
           const resolvedStreak = result.currentStreak ?? optimisticStreak
@@ -347,6 +364,7 @@ export default function Home() {
 
             return {
               ...current,
+              lastActionId: result.id ?? null,
               capturedNewSafePerDay: result.newSafePerDay ?? current.capturedNewSafePerDay,
               capturedDaysLeft: result.daysLeft ?? current.capturedDaysLeft,
               capturedStreak: resolvedStreak,
@@ -421,7 +439,7 @@ export default function Home() {
       return
     }
 
-    const { status: s } = computeDecision(user.balance, user.nextPayday, n)
+    const { status: s } = computeDecision(user.balance, user.nextPayday, n, user.upcomingExpensesTotal ?? 0)
 
     if (s !== status) {
       setMessage(randomMessage(s))
@@ -494,9 +512,11 @@ export default function Home() {
     </div>
   )
 
-  const todayS = todayStatus(user.balance, user.nextPayday)
-  const safePerDay = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday) : 0
-  const daysLeft = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
+  const upcoming   = user.upcomingExpensesTotal ?? 0
+  const activePot  = user.activePot ?? 'card'
+  const todayS     = todayStatus(user.balance, user.nextPayday, upcoming)
+  const safePerDay = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday, upcoming) : 0
+  const daysLeft   = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
   const paydayPassed = !!user.nextPayday && daysLeft <= 0
   const hasNoBalance = (user.balance ?? 0) <= 0
   const sliderMax = Math.max(Math.ceil(user.balance ?? 100), 100)
@@ -511,9 +531,49 @@ export default function Home() {
   const centsColor = dec ? `${dec.color}9e` : 'rgba(244,244,245,0.46)'
   const cursorColor = dec?.color ?? '#71717a'
   const personalizationMessage = status ? personalizationFor(safePerDay) : ''
+  const effectiveBalanceForFit = Math.max(0, (user.balance ?? 0) - upcoming)
   const daysAffordable = status === 'stop'
-    ? daysUntilAffordable(user.balance, daysLeft, parseFloat(amount) || 0)
+    ? daysUntilAffordable(effectiveBalanceForFit, daysLeft, parseFloat(amount) || 0)
     : null
+  const periodTotal  = PERIOD_DAYS[user.payFrequency] ?? (daysLeft + 7)
+  const daysElapsed  = Math.max(0, periodTotal - daysLeft)
+  const periodPct    = Math.min(98, Math.round((daysElapsed / periodTotal) * 100))
+
+  async function switchPot(pot) {
+    if (potSaving || pot === activePot) return
+
+    const snap = user
+    const nextBalance = pot === 'cash'
+      ? (user.cashBalance ?? 0)
+      : (user.cardBalance ?? user.balance ?? 0)
+
+    setPotSaving(true)
+    setUser({ ...user, activePot: pot, balance: nextBalance })
+
+    try {
+      const updated = await updateProfile({ activePot: pot })
+      setUser(updated)
+      const n = parseFloat(amount)
+      if (n > 0 && updated?.nextPayday && daysUntilPayday(updated.nextPayday) > 0) {
+        if ((updated.balance ?? 0) <= 0) {
+          setStatus('stop')
+          setMessage('Only essentials for now.')
+        } else if (n > updated.balance) {
+          setStatus('stop')
+          setMessage('This is more than what you have.')
+        } else {
+          const next = computeDecision(updated.balance, updated.nextPayday, n, updated.upcomingExpensesTotal ?? 0)
+          setStatus(next.status)
+          setMessage(randomMessage(next.status))
+        }
+      }
+    } catch (err) {
+      setUser(snap)
+      setPageError(err.message || 'Could not switch accounts.')
+    } finally {
+      setPotSaving(false)
+    }
+  }
 
   async function saveNewPayday() {
     if (!newPayday) return
@@ -644,6 +704,35 @@ export default function Home() {
             <p className="mt-0.5 text-xs font-medium text-white/50">Every spend puts you at risk right now.</p>
           </div>
         )}
+
+        <div className="mb-5 flex items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 backdrop-blur-xl">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/35">Checking</p>
+            <p className="mt-0.5 text-xs font-semibold text-white/55">
+              {activePot === 'cash' ? 'Cash' : 'Card'} pot
+            </p>
+          </div>
+          <div className="grid grid-cols-2 rounded-xl border border-white/[0.08] bg-black/20 p-1">
+            {[
+              ['card', 'Card'],
+              ['cash', 'Cash'],
+            ].map(([pot, label]) => (
+              <button
+                key={pot}
+                type="button"
+                onClick={() => switchPot(pot)}
+                disabled={potSaving}
+                className={`rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-200 active:scale-[0.96] ${
+                  activePot === pot
+                    ? 'bg-white/[0.14] text-white shadow-[0_0_12px_rgba(255,255,255,0.08)]'
+                    : 'text-white/45 hover:bg-white/[0.07] hover:text-white/70'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="mb-8">
           <p
@@ -830,6 +919,8 @@ export default function Home() {
                 streakIncreased={decisionState.streakIncreased}
                 personalizationMessage={personalizationMessage}
                 loading={actionLoading}
+                lastActionId={decisionState.lastActionId}
+                onTag={updateActionTag}
               />
 
               {actionError && (
@@ -846,7 +937,7 @@ export default function Home() {
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     {
-                      label: 'Balance',
+                      label: activePot === 'cash' ? 'Cash' : 'Card',
                       value: `$${(user.balance ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
                     },
                     {
@@ -868,6 +959,29 @@ export default function Home() {
                       <div className="mt-1.5 text-[15px] font-black text-white/80">{value}</div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Survival progress bar */}
+              {!decisionError && user.nextPayday && !paydayPassed && daysLeft > 0 && (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-white/25">
+                    <span>Payday survival</span>
+                    <span>{daysLeft}d left</span>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.max(2, periodPct)}%`,
+                        background: todayS === 'safe'
+                          ? 'linear-gradient(to right, #34d39966, #34d399)'
+                          : todayS === 'careful'
+                            ? 'linear-gradient(to right, #fbbf2466, #fbbf24)'
+                            : 'linear-gradient(to right, #f8717166, #f87171)',
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 

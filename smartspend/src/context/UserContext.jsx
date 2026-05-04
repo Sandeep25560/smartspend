@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { getProfile, isAuthError } from '../services/api'
 
 const UserContext = createContext(null)
@@ -40,6 +40,24 @@ export function UserProvider({ children }) {
       throw error
     }
   }, [setUser])
+
+  useEffect(() => {
+    if (!localStorage.getItem('ss_token')) return undefined
+
+    const sync = () => {
+      if (document.visibilityState === 'visible') {
+        refresh().catch(() => {})
+      }
+    }
+
+    window.addEventListener('focus', sync)
+    const timer = window.setInterval(sync, 15000)
+
+    return () => {
+      window.removeEventListener('focus', sync)
+      window.clearInterval(timer)
+    }
+  }, [refresh])
 
   return (
     <UserContext.Provider value={{ user, setUser, refresh, syncError, setSyncError }}>

@@ -4,7 +4,10 @@ public class ActionRecord
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
+    public Guid? FinancePlanId { get; set; }
     public string? RequestId { get; set; } // idempotency key (null when not provided)
+    public string? Tag { get; set; }       // optional spend category
+    public string Pot { get; set; } = "card";
     public double Amount { get; set; }
     public bool Spent { get; set; }
     public string Decision { get; set; } = ""; // YES / WAIT / NO
@@ -15,4 +18,5 @@ public class ActionRecord
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public User User { get; set; } = null!;
+    public FinancePlan? FinancePlan { get; set; }
 }

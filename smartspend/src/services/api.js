@@ -183,6 +183,14 @@ export async function updateProfile(data) {
   }, 'Could not save your setup. Please retry.')
 }
 
+export async function joinSharedPlan(code) {
+  return request(`${BASE}/share/join`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ code }),
+  }, 'Could not join that shared plan.')
+}
+
 // ── Decisions ─────────────────────────────────────────────────────────────────
 
 export async function checkDecision(amount) {
@@ -193,12 +201,20 @@ export async function checkDecision(amount) {
   }, 'Something went wrong. Try again.')
 }
 
-export async function recordAction(amount, spent, sendPush = false, requestId = null) {
+export async function recordAction(amount, spent, sendPush = false, requestId = null, tag = null, pot = null) {
   return request(`${BASE}/action`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ amount, spent, sendPush, requestId }),
+    body: JSON.stringify({ amount, spent, sendPush, requestId, tag, pot }),
   }, "Couldn't update. Please retry.")
+}
+
+export async function updateActionTag(id, tag) {
+  return request(`${BASE}/action/${id}/tag`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ tag }),
+  }, "Couldn't save tag.")
 }
 
 export async function getActionHistory(limit = 20) {
@@ -213,6 +229,72 @@ export async function notifyDecision(amount) {
     headers: authHeaders(),
     body: JSON.stringify({ amount }),
   }, 'Could not send the reminder.')
+}
+
+export async function scheduleDecisionPrompt(amount, requestId, decision = null, delaySeconds = 14, pot = null) {
+  return request(`${BASE}/notifications/decision-prompt`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ amount, requestId, decision, delaySeconds, pot }),
+  }, 'Could not schedule the reminder.')
+}
+
+export async function cancelDecisionPrompt(requestId) {
+  return request(`${BASE}/notifications/decision-prompt/cancel`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ requestId }),
+  }, 'Could not cancel the reminder.')
+}
+
+// ── Recurring expenses ────────────────────────────────────────────────────────
+
+export async function getExpenses() {
+  return request(`${BASE}/expenses`, { headers: authHeaders() }, 'Could not load expenses.')
+}
+
+export async function addExpense(name, amount, dayOfMonth) {
+  return request(`${BASE}/expenses`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ name, amount, dayOfMonth }),
+  }, 'Could not save expense.')
+}
+
+export async function deleteExpense(id) {
+  return request(`${BASE}/expenses/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }, 'Could not delete expense.')
+}
+
+export async function exportActionsCsv() {
+  async function fetchCsv(retry = false) {
+    const res = await fetch(`${BASE}/export/actions.csv`, {
+      headers: authHeaders(),
+    })
+
+    if (res.status === 401 && !retry && await tryRefresh()) {
+      return fetchCsv(true)
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new ApiError(data.error ?? friendlyError(res.status, 'Could not export your data.'), res.status)
+    }
+
+    return res.blob()
+  }
+
+  const blob = await fetchCsv()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `smartspend-actions-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 // ── Streak ────────────────────────────────────────────────────────────────────

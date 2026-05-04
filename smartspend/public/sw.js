@@ -68,6 +68,21 @@ async function handleDecisionAction(action, data) {
 async function recordDecisionAction(data, spent) {
   const amount = Number(data.amount)
 
+  if (data.apiBase && data.promptToken) {
+    const response = await fetch(`${data.apiBase}/api/notifications/action-response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: data.promptToken, spent }),
+    })
+
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(result.error ?? `Action failed (${response.status}).`)
+    }
+
+    return result
+  }
+
   if (!data.apiBase || !data.token || !Number.isFinite(amount)) {
     throw new Error('Missing action data.')
   }

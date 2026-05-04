@@ -29,7 +29,7 @@ public class DailyNotificationService(
         while (!stoppingToken.IsCancellationRequested)
         {
             var nextUtc = await GetOrComputeNextFireAsync();
-            var delay   = nextUtc - DateTime.UtcNow;
+            var delay = nextUtc - DateTime.UtcNow;
 
             if (delay > TimeSpan.Zero)
             {
@@ -62,21 +62,24 @@ public class DailyNotificationService(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var next  = ComputeNextFire();
+        var next = ComputeNextFire();
         var entry = await db.AppSettings.FindAsync(FireKey);
         if (entry is null)
+        {
             db.AppSettings.Add(new AppSetting { Key = FireKey, Value = next.ToString("o") });
+        }
         else
         {
-            entry.Value     = next.ToString("o");
+            entry.Value = next.ToString("o");
             entry.UpdatedAt = DateTime.UtcNow;
         }
+
         await db.SaveChangesAsync();
     }
 
     private DateTime ComputeNextFire()
     {
-        var tz       = GetTimeZone();
+        var tz = GetTimeZone();
         var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
         var nextLocal = nowLocal.Hour < 8
             ? nowLocal.Date.AddHours(8)
@@ -86,44 +89,51 @@ public class DailyNotificationService(
 
     private async Task SendDailyBatchAsync(CancellationToken ct)
     {
-        using var scope     = scopeFactory.CreateScope();
-        var db              = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var decisionService = scope.ServiceProvider.GetRequiredService<DecisionService>();
-        var pushService     = scope.ServiceProvider.GetRequiredService<PushService>();
+        var pushService = scope.ServiceProvider.GetRequiredService<PushService>();
+        var plans = scope.ServiceProvider.GetRequiredService<FinancePlanService>();
 
         var users = await db.Users
             .Include(u => u.Subscriptions)
+            .Include(u => u.RecurringExpenses)
+            .Include(u => u.FinancePlan).ThenInclude(p => p!.RecurringExpenses)
             .Where(u => u.Subscriptions.Any())
             .ToListAsync(ct);
 
-        var tz        = GetTimeZone();
-        var nowLocal  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var tz = GetTimeZone();
+        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
         var isWeekend = nowLocal.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-        var deadSubs  = new List<int>();
+        var deadSubs = new List<int>();
 
         foreach (var user in users)
         {
             string title, body;
 
-            if (!user.NextPayday.HasValue)
+            var plan = await plans.EnsurePlanAsync(user, ct);
+            var balance = FinancePlanService.BalanceFor(plan);
+
+            if (!plan.NextPayday.HasValue)
                 continue;
 
-            var paydayPassed = user.NextPayday.Value.Date < DateTime.UtcNow.Date;
+            var paydayPassed = plan.NextPayday.Value.Date < DateTime.UtcNow.Date;
 
             if (paydayPassed)
             {
                 title = "SmartSpend";
-                body  = "Your payday has passed — open the app to set your next one.";
+                body = "Your payday has passed - open the app to set your next one.";
             }
             else
             {
-                var result = decisionService.DailyStatus(user.Balance, user.NextPayday.Value);
+                var upcoming = BudgetMath.UpcomingExpensesTotal(plan.RecurringExpenses, plan.NextPayday);
+                var result = decisionService.DailyStatus(balance, plan.NextPayday.Value, upcoming);
                 (title, body) = (result.Status, isWeekend) switch
                 {
-                    ("SAFE",    true)  => ("SmartSpend", $"Weekends get expensive. You have ${result.SafePerDay:F0} safe today."),
-                    ("SAFE",    false) => ("SmartSpend", $"You have ${result.SafePerDay:F0} safe to spend today."),
-                    ("CAREFUL", true)  => ("SmartSpend", $"Weekend budget: ${result.SafePerDay:F0}. Don't push it."),
-                    _                  => ("SmartSpend", "Today is tight — be careful."),
+                    ("SAFE", true) => ("SmartSpend", $"Weekends get expensive. You have ${result.SafePerDay:F0} safe today."),
+                    ("SAFE", false) => ("SmartSpend", $"You have ${result.SafePerDay:F0} safe to spend today."),
+                    ("CAREFUL", true) => ("SmartSpend", $"Weekend budget: ${result.SafePerDay:F0}. Don't push it."),
+                    _ => ("SmartSpend", "Today is tight - be careful."),
                 };
             }
 
@@ -140,6 +150,6 @@ public class DailyNotificationService(
             await db.SaveChangesAsync(ct);
         }
 
-        logger.LogInformation("Daily push complete — {Count} users notified.", users.Count);
+        logger.LogInformation("Daily push complete - {Count} users notified.", users.Count);
     }
 }

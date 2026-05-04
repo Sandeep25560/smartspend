@@ -1,15 +1,17 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using Serilog;
 using SmartSpend.Api.BackgroundServices;
 using SmartSpend.Api.Data;
 using SmartSpend.Api.Services;
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 
-// ── Serilog (structured logging) ─────────────────────────────────────────────
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
@@ -19,36 +21,33 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog();
 
-// ── Fail fast on missing secrets ──────────────────────────────────────────────
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.StartsWith('<'))
+{
     throw new InvalidOperationException(
         "Jwt:Key is missing or still a placeholder. Set a real secret in Render environment variables.");
+}
 
-// ── Sentry (error tracking) ───────────────────────────────────────────────────
 builder.WebHost.UseSentry(opts =>
 {
-    opts.Dsn               = builder.Configuration["Sentry:Dsn"] ?? "";
-    opts.TracesSampleRate  = 0.1;
-    opts.SendDefaultPii    = false;
-    // DSN is optional — no Sentry if not configured
+    opts.Dsn = builder.Configuration["Sentry:Dsn"] ?? "";
+    opts.TracesSampleRate = 0.1;
+    opts.SendDefaultPii = false;
     opts.IsGlobalModeEnabled = false;
 });
 
 builder.Services.AddControllers();
 
-builder.Services.AddDbContext<AppDbContext>(opts =>
-    opts.UseNpgsql(builder.Configuration.GetConnectionString("Default")
-        ?? throw new InvalidOperationException("ConnectionStrings:Default is required.")));
+var dbConnectionString = GetPostgresConnectionString(builder.Configuration);
+builder.Services.AddDbContext<AppDbContext>(opts => opts.UseNpgsql(dbConnectionString));
 
-// ── Rate limiting: 10 auth attempts per IP per minute ─────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth", o =>
     {
         o.PermitLimit = 10;
-        o.Window      = TimeSpan.FromMinutes(1);
-        o.QueueLimit  = 0;
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 0;
     });
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (ctx, _) =>
@@ -59,17 +58,16 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// ── JWT auth ──────────────────────────────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>
     {
         opts.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
-            ValidateIssuer           = false,
-            ValidateAudience         = false,
-            ClockSkew                = TimeSpan.Zero, // no grace period — tokens expire exactly on time
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ClockSkew = TimeSpan.Zero,
         };
     });
 builder.Services.AddAuthorization();
@@ -77,12 +75,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<DecisionService>();
+builder.Services.AddScoped<FinancePlanService>();
+builder.Services.AddScoped<ActionRecorder>();
 builder.Services.AddScoped<PushService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddHostedService<DailyNotificationService>();
 builder.Services.AddHostedService<EveningNudgeService>();
+builder.Services.AddHostedService<WeeklySummaryService>();
+builder.Services.AddHostedService<PendingDecisionPromptService>();
 
-// ── CORS — locked to allowed origins only ─────────────────────────────────────
 var localOrigins = new[]
 {
     "http://localhost:5173", "http://localhost:5174",
@@ -106,35 +107,37 @@ builder.Services.AddCors(opts =>
 
 var app = builder.Build();
 
-// ── Global exception handler ───────────────────────────────────────────────────
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+});
+
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
     {
-        context.Response.StatusCode  = StatusCodes.Status500InternalServerError;
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/json";
         await context.Response.WriteAsJsonAsync(new { error = "Something went wrong. Try again." });
     });
 });
 
-// ── Security headers ──────────────────────────────────────────────────────────
 app.Use(async (ctx, next) =>
 {
     var h = ctx.Response.Headers;
-    h["X-Content-Type-Options"]  = "nosniff";
-    h["X-Frame-Options"]         = "DENY";
-    h["Referrer-Policy"]         = "strict-origin-when-cross-origin";
-    h["Permissions-Policy"]      = "camera=(), microphone=(), geolocation=()";
-    h["X-XSS-Protection"]        = "1; mode=block";
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    h["X-XSS-Protection"] = "1; mode=block";
     await next();
 });
 
-// ── Database: apply pending migrations on startup ─────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    ctx.Database.Migrate();
-    app.Services.GetRequiredService<VapidKeyService>(); // warm up VAPID keys
+    await ctx.Database.MigrateAsync();
+    app.Services.GetRequiredService<VapidKeyService>();
 }
 
 app.UseCors("Frontend");
@@ -143,7 +146,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ── Health check ───────────────────────────────────────────────────────────────
 app.MapGet("/health", async (AppDbContext db) =>
 {
     try
@@ -160,3 +162,59 @@ app.MapGet("/health", async (AppDbContext db) =>
 }).AllowAnonymous();
 
 app.Run();
+
+static string GetPostgresConnectionString(IConfiguration config)
+{
+    var value = new[]
+    {
+        config.GetConnectionString("Default"),
+        config["DATABASE_URL"],
+        config["DatabaseUrl"],
+    }.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+    if (string.IsNullOrWhiteSpace(value) || value.StartsWith('<'))
+    {
+        throw new InvalidOperationException(
+            "PostgreSQL connection string is missing. Set ConnectionStrings__Default or DATABASE_URL in Render.");
+    }
+
+    return NormalizePostgresConnectionString(value);
+}
+
+static string NormalizePostgresConnectionString(string value)
+{
+    var trimmed = value.Trim();
+    if (!trimmed.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        && !trimmed.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return trimmed;
+    }
+
+    var uri = new Uri(trimmed);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var builder = new NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.Port > 0 ? uri.Port : 5432,
+        Database = WebUtility.UrlDecode(uri.AbsolutePath.TrimStart('/')),
+        Username = userInfo.Length > 0 ? WebUtility.UrlDecode(userInfo[0]) : "",
+        Password = userInfo.Length > 1 ? WebUtility.UrlDecode(userInfo[1]) : "",
+    };
+
+    foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var parts = pair.Split('=', 2);
+        if (parts.Length != 2) continue;
+
+        var key = WebUtility.UrlDecode(parts[0]);
+        var val = WebUtility.UrlDecode(parts[1]);
+
+        if (key.Equals("sslmode", StringComparison.OrdinalIgnoreCase)
+            && Enum.TryParse<SslMode>(val, ignoreCase: true, out var sslMode))
+        {
+            builder.SslMode = sslMode;
+        }
+    }
+
+    return builder.ConnectionString;
+}

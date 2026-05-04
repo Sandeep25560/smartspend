@@ -72,9 +72,10 @@ export default function Insights() {
     )
   }
 
-  const status    = todayStatus(user.balance, user.nextPayday)
+  const upcoming  = user.upcomingExpensesTotal ?? 0
+  const status    = todayStatus(user.balance, user.nextPayday, upcoming)
   const theme     = statusTheme[status]
-  const safeDay   = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday) : 0
+  const safeDay   = user.nextPayday ? dailySafeAmount(user.balance, user.nextPayday, upcoming) : 0
   const daysLeft  = user.nextPayday ? daysUntilPayday(user.nextPayday) : 0
   const message   = STATES[status]?.messages?.[0] ?? 'You have a clear answer.'
 
@@ -119,7 +120,7 @@ export default function Insights() {
         {/* Key numbers */}
         <section className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Balance',    value: money(user.balance), color: 'rgba(255,255,255,0.88)' },
+            { label: user.activePot === 'cash' ? 'Cash' : 'Card', value: money(user.balance), color: 'rgba(255,255,255,0.88)' },
             { label: 'Safe / day', value: money(safeDay),      color: theme.color },
             { label: 'Days left',  value: `${daysLeft}d`,      color: 'rgba(255,255,255,0.88)' },
           ].map(({ label, value, color }) => (
@@ -240,6 +241,16 @@ export default function Insights() {
                         <span className="text-[11px] font-semibold text-white/35">
                           {h.spent ? 'spent' : 'skipped'}
                         </span>
+                        {h.tag && (
+                          <span className="rounded-full border border-white/[0.07] bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-white/45">
+                            {h.tag}
+                          </span>
+                        )}
+                        {h.pot && (
+                          <span className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-bold capitalize text-white/35">
+                            {h.pot}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] font-medium text-white/30">
                         {dateStr} · {timeStr}

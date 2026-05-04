@@ -11,7 +11,7 @@ namespace SmartSpend.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, AuthService auth, EmailService email) : ControllerBase
+public class AuthController(AppDbContext db, AuthService auth, EmailService email, FinancePlanService plans) : ControllerBase
 {
     private Guid Uid => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -44,6 +44,7 @@ public class AuthController(AppDbContext db, AuthService auth, EmailService emai
         db.Streaks.Add(streak);
         db.RefreshTokens.Add(rt);
         await db.SaveChangesAsync();
+        await plans.EnsurePlanAsync(user);
 
         return Ok(new
         {
@@ -64,6 +65,7 @@ public class AuthController(AppDbContext db, AuthService auth, EmailService emai
         var emailNorm = req.Email.ToLower().Trim();
         var user = await db.Users
             .Include(u => u.Streak)
+            .Include(u => u.FinancePlan)
             .FirstOrDefaultAsync(u => u.Email == emailNorm);
 
         if (user is null || !auth.VerifyPassword(req.Password, user.PasswordHash))
@@ -94,6 +96,7 @@ public class AuthController(AppDbContext db, AuthService auth, EmailService emai
 
         var stored = await db.RefreshTokens
             .Include(r => r.User).ThenInclude(u => u.Streak)
+            .Include(r => r.User).ThenInclude(u => u.FinancePlan)
             .FirstOrDefaultAsync(r => r.Token == req.RefreshToken);
 
         if (stored is null || !stored.IsActive)
@@ -209,10 +212,24 @@ public class AuthController(AppDbContext db, AuthService auth, EmailService emai
         return Ok(new { message = "Account deleted." });
     }
 
-    private static object Map(User u, Streak? s) => new
+    private static object Map(User u, Streak? s)
     {
-        u.Id, u.Email, u.Balance, u.NextPayday,
-        u.PayFrequency, u.OnboardingCompleted,
-        streak = s is null ? null : new { s.CurrentStreak, s.LastUpdated },
-    };
+        var plan = u.FinancePlan;
+        var activePot = FinancePlanService.NormalizePot(plan?.ActivePot);
+        return new
+        {
+            u.Id,
+            u.Email,
+            Balance = plan is null ? u.Balance : FinancePlanService.BalanceFor(plan),
+            CashBalance = plan?.CashBalance ?? 0,
+            CardBalance = plan?.CardBalance ?? u.Balance,
+            ActivePot = activePot,
+            NextPayday = plan?.NextPayday ?? u.NextPayday,
+            PayFrequency = plan?.PayFrequency ?? u.PayFrequency,
+            OnboardingCompleted = plan?.OnboardingCompleted ?? u.OnboardingCompleted,
+            ShareCode = plan?.ShareCode,
+            SharedMemberCount = Math.Max(1, plan?.Users.Count ?? 1),
+            streak = s is null ? null : new { s.CurrentStreak, s.LastUpdated },
+        };
+    }
 }

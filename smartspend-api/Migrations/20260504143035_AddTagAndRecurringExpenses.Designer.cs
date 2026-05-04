@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmartSpend.Api.Data;
@@ -11,9 +12,11 @@ using SmartSpend.Api.Data;
 namespace SmartSpend.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260504143035_AddTagAndRecurringExpenses")]
+    partial class AddTagAndRecurringExpenses
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -44,13 +47,6 @@ namespace SmartSpend.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("FinancePlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Pot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("RequestId")
                         .HasColumnType("text");
 
@@ -70,8 +66,6 @@ namespace SmartSpend.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("FinancePlanId");
 
                     b.HasIndex("UserId", "RequestId")
                         .IsUnique();
@@ -94,50 +88,6 @@ namespace SmartSpend.Api.Migrations
                     b.HasKey("Key");
 
                     b.ToTable("AppSettings");
-                });
-
-            modelBuilder.Entity("SmartSpend.Api.Models.FinancePlan", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActivePot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("CardBalance")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("CashBalance")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("NextPayday")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("OnboardingCompleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PayFrequency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ShareCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ShareCode")
-                        .IsUnique();
-
-                    b.ToTable("FinancePlans");
                 });
 
             modelBuilder.Entity("SmartSpend.Api.Models.PasswordResetToken", b =>
@@ -167,69 +117,6 @@ namespace SmartSpend.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens");
-                });
-
-            modelBuilder.Entity("SmartSpend.Api.Models.PendingDecisionPrompt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<double>("Amount")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("ApiBase")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Decision")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("DueAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("FinancePlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Pot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("RespondedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FinancePlanId");
-
-                    b.HasIndex("Token")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "RequestId")
-                        .IsUnique();
-
-                    b.ToTable("PendingDecisionPrompts");
                 });
 
             modelBuilder.Entity("SmartSpend.Api.Models.PushSubscription", b =>
@@ -274,9 +161,6 @@ namespace SmartSpend.Api.Migrations
                     b.Property<int>("DayOfMonth")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("FinancePlanId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -285,8 +169,6 @@ namespace SmartSpend.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("FinancePlanId");
 
                     b.HasIndex("UserId");
 
@@ -363,9 +245,6 @@ namespace SmartSpend.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("FinancePlanId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("NextPayday")
                         .HasColumnType("timestamp with time zone");
 
@@ -385,25 +264,16 @@ namespace SmartSpend.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FinancePlanId");
-
                     b.ToTable("Users");
                 });
 
             modelBuilder.Entity("SmartSpend.Api.Models.ActionRecord", b =>
                 {
-                    b.HasOne("SmartSpend.Api.Models.FinancePlan", "FinancePlan")
-                        .WithMany("ActionRecords")
-                        .HasForeignKey("FinancePlanId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("SmartSpend.Api.Models.User", "User")
                         .WithMany("ActionRecords")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("FinancePlan");
 
                     b.Navigation("User");
                 });
@@ -415,24 +285,6 @@ namespace SmartSpend.Api.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("SmartSpend.Api.Models.PendingDecisionPrompt", b =>
-                {
-                    b.HasOne("SmartSpend.Api.Models.FinancePlan", "FinancePlan")
-                        .WithMany("PendingDecisionPrompts")
-                        .HasForeignKey("FinancePlanId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SmartSpend.Api.Models.User", "User")
-                        .WithMany("PendingDecisionPrompts")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FinancePlan");
 
                     b.Navigation("User");
                 });
@@ -450,18 +302,11 @@ namespace SmartSpend.Api.Migrations
 
             modelBuilder.Entity("SmartSpend.Api.Models.RecurringExpense", b =>
                 {
-                    b.HasOne("SmartSpend.Api.Models.FinancePlan", "FinancePlan")
-                        .WithMany("RecurringExpenses")
-                        .HasForeignKey("FinancePlanId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("SmartSpend.Api.Models.User", "User")
                         .WithMany("RecurringExpenses")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("FinancePlan");
 
                     b.Navigation("User");
                 });
@@ -490,32 +335,9 @@ namespace SmartSpend.Api.Migrations
 
             modelBuilder.Entity("SmartSpend.Api.Models.User", b =>
                 {
-                    b.HasOne("SmartSpend.Api.Models.FinancePlan", "FinancePlan")
-                        .WithMany("Users")
-                        .HasForeignKey("FinancePlanId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("FinancePlan");
-                });
-
-            modelBuilder.Entity("SmartSpend.Api.Models.FinancePlan", b =>
-                {
-                    b.Navigation("ActionRecords");
-
-                    b.Navigation("PendingDecisionPrompts");
-
-                    b.Navigation("RecurringExpenses");
-
-                    b.Navigation("Users");
-                });
-
-            modelBuilder.Entity("SmartSpend.Api.Models.User", b =>
-                {
                     b.Navigation("ActionRecords");
 
                     b.Navigation("PasswordResetTokens");
-
-                    b.Navigation("PendingDecisionPrompts");
 
                     b.Navigation("RecurringExpenses");
 

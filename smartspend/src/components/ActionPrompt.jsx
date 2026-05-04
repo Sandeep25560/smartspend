@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function fmt(n) {
   const value = Number(n)
   return `$${Math.max(0, Number.isFinite(value) ? value : 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -51,6 +53,59 @@ function AppreciationPanel({ safePerDay, streak, confidenceMessage, streakIncrea
   )
 }
 
+const TAGS = ['Food', 'Transport', 'Bills', 'Shopping', 'Fun', 'Other']
+
+function TagChips({ actionId, onTag }) {
+  const [selected, setSelected] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function tap(tag) {
+    if (selected || saving) return
+    setSelected(tag)
+    setSaving(true)
+    setError('')
+
+    if (actionId && onTag) {
+      onTag(actionId, tag)
+        .catch(() => {
+          setSelected(null)
+          setError("Couldn't save that.")
+        })
+        .finally(() => setSaving(false))
+    } else {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/[0.07] pt-4">
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-white/30">What was it for?</p>
+      <div className="flex flex-wrap gap-1.5">
+        {TAGS.map(tag => (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => tap(tag)}
+            className={`rounded-full px-3 py-1 text-xs font-bold transition-all duration-150 ${
+              selected === tag
+                ? 'bg-white/20 text-white/90'
+                : selected
+                  ? 'opacity-30 cursor-default border border-white/10 text-white/40'
+                  : 'border border-white/10 bg-white/[0.05] text-white/50 hover:bg-white/[0.10] hover:text-white/75 active:scale-[0.96]'
+            }`}
+          >
+            {tag}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p className="mt-2 text-[11px] font-semibold text-rose-300/80">{error}</p>
+      )}
+    </div>
+  )
+}
+
 function RecoveryPanel({ amount, safePerDay, newSafePerDay, daysLeft, balance }) {
   const numAmount = Number(amount)
   const nextSafePerDay = Number.isFinite(newSafePerDay) && newSafePerDay > 0
@@ -88,6 +143,8 @@ export default function ActionPrompt({
   confidenceMessage = '',
   streakIncreased = false,
   personalizationMessage = '',
+  lastActionId = null,
+  onTag,
   loading = false,
 }) {
   if (mode === 'hidden') return null
@@ -103,13 +160,20 @@ export default function ActionPrompt({
             streakIncreased={streakIncreased}
           />
         ) : (
-          <RecoveryPanel
-            amount={amount}
-            safePerDay={safePerDay}
-            newSafePerDay={newSafePerDay}
-            daysLeft={daysLeft}
-            balance={balance}
-          />
+          <>
+            <RecoveryPanel
+              amount={amount}
+              safePerDay={safePerDay}
+              newSafePerDay={newSafePerDay}
+              daysLeft={daysLeft}
+              balance={balance}
+            />
+            {lastActionId && (
+              <div className="animate-messageIn rounded-b-2xl px-1">
+                <TagChips actionId={lastActionId} onTag={onTag} />
+              </div>
+            )}
+          </>
         )}
       </div>
     )

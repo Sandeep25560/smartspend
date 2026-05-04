@@ -5,13 +5,13 @@ using SmartSpend.Api.Services;
 
 namespace SmartSpend.Api.BackgroundServices;
 
-public class EveningNudgeService(
+public class WeeklySummaryService(
     IServiceScopeFactory scopeFactory,
-    ILogger<EveningNudgeService> logger,
+    ILogger<WeeklySummaryService> logger,
     IConfiguration config)
     : BackgroundService
 {
-    private const string FireKey = "notification:evening:next_fire_utc";
+    private const string FireKey = "notification:weekly:next_fire_utc";
 
     private TimeZoneInfo GetTimeZone()
     {
@@ -33,13 +33,13 @@ public class EveningNudgeService(
 
             if (delay > TimeSpan.Zero)
             {
-                logger.LogInformation("Evening nudge scheduled at {Time} UTC (in {Min:F0} min).", nextUtc, delay.TotalMinutes);
+                logger.LogInformation("Weekly summary scheduled at {Time} UTC (in {Min:F0} min).", nextUtc, delay.TotalMinutes);
                 await Task.Delay(delay, stoppingToken);
             }
 
             if (!stoppingToken.IsCancellationRequested)
             {
-                await SendEveningBatchAsync(stoppingToken);
+                await SendWeeklySummaryAsync(stoppingToken);
                 await PersistNextFireAsync();
             }
         }
@@ -81,51 +81,61 @@ public class EveningNudgeService(
     {
         var tz = GetTimeZone();
         var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        var nextLocal = nowLocal.Hour < 19
-            ? nowLocal.Date.AddHours(19)
-            : nowLocal.Date.AddDays(1).AddHours(19);
+        var daysUntilSunday = ((int)DayOfWeek.Sunday - (int)nowLocal.DayOfWeek + 7) % 7;
+        if (daysUntilSunday == 0 && nowLocal.Hour >= 20) daysUntilSunday = 7;
+
+        var nextLocal = nowLocal.Date.AddDays(daysUntilSunday).AddHours(20);
         return TimeZoneInfo.ConvertTimeToUtc(nextLocal, tz);
     }
 
-    private async Task SendEveningBatchAsync(CancellationToken ct)
+    private async Task SendWeeklySummaryAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var decisionService = scope.ServiceProvider.GetRequiredService<DecisionService>();
         var pushService = scope.ServiceProvider.GetRequiredService<PushService>();
         var plans = scope.ServiceProvider.GetRequiredService<FinancePlanService>();
 
+        var thisWeek = DateTime.UtcNow.AddDays(-7);
+        var lastWeek = DateTime.UtcNow.AddDays(-14);
         var users = await db.Users
             .Include(u => u.Subscriptions)
-            .Include(u => u.RecurringExpenses)
-            .Include(u => u.FinancePlan).ThenInclude(p => p!.RecurringExpenses)
+            .Include(u => u.FinancePlan)
             .Where(u => u.Subscriptions.Any())
             .ToListAsync(ct);
 
-        var tz = GetTimeZone();
-        var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-        var isWeekend = nowLocal.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
         var deadSubs = new List<int>();
 
         foreach (var user in users)
         {
             var plan = await plans.EnsurePlanAsync(user, ct);
-            if (!plan.NextPayday.HasValue) continue;
+            var records = await db.ActionRecords
+                .Where(a => (a.FinancePlanId == plan.Id || (a.FinancePlanId == null && a.UserId == user.Id)) && a.CreatedAt >= lastWeek)
+                .ToListAsync(ct);
 
-            var balance = FinancePlanService.BalanceFor(plan);
-            var upcoming = BudgetMath.UpcomingExpensesTotal(plan.RecurringExpenses, plan.NextPayday);
-            var result = decisionService.DailyStatus(balance, plan.NextPayday.Value, upcoming);
-            var body = (result.Status, isWeekend) switch
+            var current = records.Where(r => r.CreatedAt >= thisWeek).ToList();
+            var previous = records.Where(r => r.CreatedAt < thisWeek).ToList();
+
+            string body;
+            if (current.Count == 0)
             {
-                ("SAFE", false) => $"You've still got ${result.SafePerDay:F0} safe today. Don't lose it tonight.",
-                ("SAFE", true) => $"Weekend evenings are expensive. ${result.SafePerDay:F0} safe - keep it.",
-                ("CAREFUL", _) => "Careful - evenings are where you overspend.",
-                _ => "Don't spend tonight - you're already at risk.",
-            };
+                body = "No activity this week. Use SmartSpend before you spend - it takes 3 seconds.";
+            }
+            else
+            {
+                var good = current.Count(r => !r.Spent);
+                var bad = current.Count(r => r.Spent);
+                var currentSaved = current.Where(r => !r.Spent).Sum(r => r.Amount);
+                var previousSaved = previous.Where(r => !r.Spent).Sum(r => r.Amount);
+                var delta = currentSaved - previousSaved;
+
+                body = delta >= 0
+                    ? $"You made {good} good calls this week, {bad} bad ones. You're ${delta:F0} ahead of last week."
+                    : $"You made {good} good calls this week, {bad} bad ones. ${Math.Abs(delta):F0} behind last week - reset today.";
+            }
 
             foreach (var sub in user.Subscriptions)
             {
-                var ok = await pushService.SendAsync(sub, "Evening check", body);
+                var ok = await pushService.SendAsync(sub, "Weekly recap", body);
                 if (!ok) deadSubs.Add(sub.Id);
             }
         }
@@ -136,6 +146,6 @@ public class EveningNudgeService(
             await db.SaveChangesAsync(ct);
         }
 
-        logger.LogInformation("Evening nudge complete - {Count} users notified.", users.Count);
+        logger.LogInformation("Weekly summary complete - {Count} users notified.", users.Count);
     }
 }

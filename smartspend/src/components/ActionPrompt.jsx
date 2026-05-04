@@ -53,46 +53,24 @@ function AppreciationPanel({ safePerDay, streak, confidenceMessage, streakIncrea
 
 function RecoveryPanel({ amount, safePerDay, newSafePerDay, daysLeft, balance }) {
   const numAmount = Number(amount)
-  const nextSafePerDay = Number.isFinite(newSafePerDay)
+  const nextSafePerDay = Number.isFinite(newSafePerDay) && newSafePerDay > 0
     ? newSafePerDay
     : daysLeft > 0
       ? Math.max(0, balance - numAmount) / daysLeft
       : 0
-  const daysImpact = safePerDay > 0 ? numAmount / safePerDay : 0
-  const runsOutEarly = Math.round(daysImpact) >= 1
-  const avoidDays = Math.max(1, Math.ceil(Math.min(daysImpact, Math.min(daysLeft, 3))))
 
   return (
     <div
       aria-live="polite"
       className="animate-panelIn rounded-2xl border border-red-400/20 bg-red-500/[0.06] px-5 py-5"
     >
-      <p className="text-base font-black text-white/80">This pushes you off track.</p>
-
-      <div className="mt-3 space-y-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white/60">
-          <span>Safe/day</span>
-          <span className="text-white/25">-&gt;</span>
-          <span className="line-through text-white/35">{fmt(safePerDay)}</span>
-          <span className="text-white/25">-&gt;</span>
-          <span className="text-red-300">{fmt(nextSafePerDay)}</span>
-        </div>
-        {runsOutEarly && (
-          <p className="text-sm font-semibold text-white/55">
-            You'd run out ~{Math.round(daysImpact)} day{Math.round(daysImpact) === 1 ? '' : 's'} early.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-4 border-t border-white/10 pt-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/35">
-          To stay on track
-        </p>
-        <ul className="mt-2 space-y-1.5 text-sm font-semibold text-white/60">
-          <li>- Spend {fmt(nextSafePerDay)}/day from now</li>
-          <li>- Avoid extra spending for {avoidDays} day{avoidDays === 1 ? '' : 's'}</li>
-        </ul>
-      </div>
+      <p className="text-lg font-black text-white/85">Off track.</p>
+      <p className="mt-2 text-[15px] font-bold" style={{ color: '#f87171' }}>
+        Stay under {fmt(nextSafePerDay)}/day to recover.
+      </p>
+      <p className="mt-1.5 text-sm font-semibold text-white/40">
+        {daysLeft} day{daysLeft === 1 ? '' : 's'} left until payday.
+      </p>
     </div>
   )
 }

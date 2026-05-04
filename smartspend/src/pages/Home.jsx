@@ -4,7 +4,7 @@ import { notifyDecision, recordAction, updateProfile } from '../services/api'
 import { isSubscribed } from '../services/pushNotifications'
 import { useUser } from '../context/UserContext'
 import {
-  computeDecision, todayStatus, randomMessage, dailySafeAmount, daysUntilPayday,
+  computeDecision, todayStatus, randomMessage, dailySafeAmount, daysUntilPayday, daysUntilAffordable,
 } from '../utils/decisionHelpers'
 import BottomNav from '../components/BottomNav'
 import NotificationCard from '../components/NotificationCard'
@@ -455,6 +455,15 @@ export default function Home() {
     setTimeout(() => inputRef.current?.focus(), 40)
   }
 
+  function selectPreset(value) {
+    const v = String(value)
+    setAmount(v)
+    setSlider(Math.min(value, sliderMax))
+    evaluate(v)
+    triggerAmountBump()
+    inputRef.current?.blur()
+  }
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center overflow-y-auto overflow-x-hidden no-scrollbar bg-[#0b0f1a]">
       <span className="w-6 h-6 border-2 border-zinc-800 border-t-emerald-500 rounded-full animate-spin" />
@@ -502,6 +511,9 @@ export default function Home() {
   const centsColor = dec ? `${dec.color}9e` : 'rgba(244,244,245,0.46)'
   const cursorColor = dec?.color ?? '#71717a'
   const personalizationMessage = status ? personalizationFor(safePerDay) : ''
+  const daysAffordable = status === 'stop'
+    ? daysUntilAffordable(user.balance, daysLeft, parseFloat(amount) || 0)
+    : null
 
   async function saveNewPayday() {
     if (!newPayday) return
@@ -795,6 +807,15 @@ export default function Home() {
                 {message}
               </p>
 
+              {daysAffordable !== null && (
+                <p
+                  className="animate-messageIn mt-3 text-sm font-semibold text-white/45"
+                  style={{ animationDelay: '120ms' }}
+                >
+                  Wait {daysAffordable} {daysAffordable === 1 ? 'day' : 'days'} and this fits your budget.
+                </p>
+              )}
+
               <ActionPrompt
                 amount={decisionState.amount}
                 mode={decisionState.promptMode}
@@ -876,6 +897,21 @@ export default function Home() {
               >
                 {decisionError || 'What are you thinking of spending?'}
               </p>
+
+              {!decisionError && (
+                <div className="flex flex-wrap gap-2">
+                  {[5, 10, 20, 50, 100].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => selectPreset(preset)}
+                      className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold text-white/45 transition-all duration-150 hover:bg-white/[0.10] hover:text-white/75 active:scale-[0.96]"
+                    >
+                      ${preset}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {decisionError === 'Your payday has passed. Update it.' && (
                 <button

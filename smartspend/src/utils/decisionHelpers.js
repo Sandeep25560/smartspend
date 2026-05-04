@@ -99,3 +99,14 @@ export function randomMessage(status) {
   const msgs = STATES[status]?.messages ?? []
   return msgs[Math.floor(Math.random() * msgs.length)] ?? ''
 }
+
+// Returns how many days to wait before this amount fits the daily budget.
+// Returns null if amount > balance (can't afford this period) or already affordable.
+export function daysUntilAffordable(balance, daysLeft, amount) {
+  if (!amount || amount <= 0 || amount > balance) return null
+  const safePerDay = balance / Math.max(1, daysLeft)
+  if (amount <= safePerDay) return null // already within budget, shouldn't be 'stop'
+  const d = Math.ceil(daysLeft - balance / amount)
+  if (d <= 0 || d >= daysLeft) return null
+  return d
+}

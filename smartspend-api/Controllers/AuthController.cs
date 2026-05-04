@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SmartSpend.Api.Data;
 using SmartSpend.Api.Models;
@@ -8,6 +9,7 @@ namespace SmartSpend.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[EnableRateLimiting("auth")]
 public class AuthController(AppDbContext db, AuthService auth) : ControllerBase
 {
     public record SignupRequest(string Email, string Password);

@@ -1,5 +1,8 @@
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5062/api').replace(/\/$/, '')
 
+// How long to wait before giving up on a single attempt (covers Render cold starts)
+const REQUEST_TIMEOUT_MS = 35_000
+
 export class ApiError extends Error {
   constructor(message, status = 0) {
     super(message)
@@ -19,6 +22,7 @@ function authHeaders() {
 function friendlyError(status, fallback) {
   if (status === 400) return fallback
   if (status === 401 || status === 403) return 'Please sign in again.'
+  if (status === 429) return 'Too many attempts. Please wait a minute and try again.'
   if (status >= 500) return 'Something went wrong. Try again.'
   return fallback
 }
@@ -36,11 +40,23 @@ async function handle(res, fallback = 'Something went wrong. Try again.') {
 }
 
 async function request(url, options, fallback) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    return await handle(await fetch(url, options), fallback)
+    const res = await fetch(url, { ...options, signal: controller.signal })
+    clearTimeout(timer)
+    return await handle(res, fallback)
   } catch (error) {
+    clearTimeout(timer)
     if (error instanceof ApiError) throw error
-    throw new ApiError('Could not connect. Please try again.', 0)
+    // AbortError means the request timed out
+    if (error.name === 'AbortError') {
+      throw new ApiError(
+        'The server is taking too long to respond. It may be starting up — please try again in a moment.',
+        0
+      )
+    }
+    throw new ApiError('Could not connect. Check your connection and try again.', 0)
   }
 }
 

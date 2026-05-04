@@ -38,7 +38,32 @@ export default function NotificationCard({ compact = false }) {
   useEffect(() => {
     if (!isPushSupported()) { setStatus('unsupported'); return }
     if (currentPermission() === 'denied') { setStatus('denied'); return }
-    setStatus(currentPermission() === 'granted' && isSubscribed() ? 'on' : 'idle')
+    if (currentPermission() !== 'granted') { setStatus('idle'); return }
+
+    // Permission is granted — verify against the real browser subscription.
+    // localStorage gets cleared on logout but the PushManager subscription
+    // survives, so this correctly restores the "on" state after login.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        if (cancelled) return
+        const reg = regs.find(r => r.active)
+        const sub = reg ? await reg.pushManager.getSubscription() : null
+        if (cancelled) return
+        if (sub) {
+          localStorage.setItem('ss_push_subscribed', 'true')
+          setStatus('on')
+        } else {
+          localStorage.removeItem('ss_push_subscribed')
+          setStatus('idle')
+        }
+      } catch {
+        if (!cancelled) setStatus(isSubscribed() ? 'on' : 'idle')
+      }
+    })()
+
+    return () => { cancelled = true }
   }, [])
 
   const isOn = status === 'on'

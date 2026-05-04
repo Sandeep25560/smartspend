@@ -4,20 +4,36 @@ using SmartSpend.Api.Services;
 
 namespace SmartSpend.Api.BackgroundServices;
 
-public class EveningNudgeService(IServiceScopeFactory scopeFactory, ILogger<EveningNudgeService> logger)
+public class EveningNudgeService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<EveningNudgeService> logger,
+    IConfiguration config)
     : BackgroundService
 {
+    private TimeZoneInfo GetTimeZone()
+    {
+        var tzId = config["Notifications:TimeZone"] ?? "Asia/Kolkata";
+        try { return TimeZoneInfo.FindSystemTimeZoneById(tzId); }
+        catch
+        {
+            logger.LogWarning("Unknown timezone '{TzId}', falling back to UTC.", tzId);
+            return TimeZoneInfo.Utc;
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now  = DateTime.Now;
-            var next = now.Hour < 19
-                ? now.Date.AddHours(19)
-                : now.Date.AddDays(1).AddHours(19);
+            var tz        = GetTimeZone();
+            var nowLocal  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            var nextLocal = nowLocal.Hour < 19
+                ? nowLocal.Date.AddHours(19)
+                : nowLocal.Date.AddDays(1).AddHours(19);
+            var nextUtc = TimeZoneInfo.ConvertTimeToUtc(nextLocal, tz);
 
-            logger.LogInformation("Next evening nudge scheduled at {Time}.", next);
-            await Task.Delay(next - now, stoppingToken);
+            logger.LogInformation("Next evening nudge scheduled at {Time} ({TZ}).", nextLocal, tz.Id);
+            await Task.Delay(nextUtc - DateTime.UtcNow, stoppingToken);
 
             if (!stoppingToken.IsCancellationRequested)
                 await SendEveningBatchAsync(stoppingToken);
@@ -36,7 +52,9 @@ public class EveningNudgeService(IServiceScopeFactory scopeFactory, ILogger<Even
             .Where(u => u.Subscriptions.Any())
             .ToListAsync(ct);
 
-        var isWeekend = DateTime.Now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        var tz        = GetTimeZone();
+        var nowLocal  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var isWeekend = nowLocal.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
         var deadSubs  = new List<int>();
 
         foreach (var user in users)

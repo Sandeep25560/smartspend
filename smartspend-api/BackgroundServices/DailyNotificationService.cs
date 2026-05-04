@@ -4,20 +4,36 @@ using SmartSpend.Api.Services;
 
 namespace SmartSpend.Api.BackgroundServices;
 
-public class DailyNotificationService(IServiceScopeFactory scopeFactory, ILogger<DailyNotificationService> logger)
+public class DailyNotificationService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<DailyNotificationService> logger,
+    IConfiguration config)
     : BackgroundService
 {
+    private TimeZoneInfo GetTimeZone()
+    {
+        var tzId = config["Notifications:TimeZone"] ?? "Asia/Kolkata";
+        try { return TimeZoneInfo.FindSystemTimeZoneById(tzId); }
+        catch
+        {
+            logger.LogWarning("Unknown timezone '{TzId}', falling back to UTC.", tzId);
+            return TimeZoneInfo.Utc;
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now  = DateTime.Now;
-            var next = now.Hour < 8
-                ? now.Date.AddHours(8)
-                : now.Date.AddDays(1).AddHours(8);
+            var tz      = GetTimeZone();
+            var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            var nextLocal = nowLocal.Hour < 8
+                ? nowLocal.Date.AddHours(8)
+                : nowLocal.Date.AddDays(1).AddHours(8);
+            var nextUtc = TimeZoneInfo.ConvertTimeToUtc(nextLocal, tz);
 
-            logger.LogInformation("Next push batch scheduled at {Time}.", next);
-            await Task.Delay(next - now, stoppingToken);
+            logger.LogInformation("Next push batch scheduled at {Time} ({TZ}).", nextLocal, tz.Id);
+            await Task.Delay(nextUtc - DateTime.UtcNow, stoppingToken);
 
             if (!stoppingToken.IsCancellationRequested)
                 await SendDailyBatchAsync(stoppingToken);
@@ -36,13 +52,15 @@ public class DailyNotificationService(IServiceScopeFactory scopeFactory, ILogger
             .Where(u => u.Subscriptions.Any())
             .ToListAsync(ct);
 
-        var deadSubs = new List<int>();
+        var tz        = GetTimeZone();
+        var nowLocal  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var isWeekend = nowLocal.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        var deadSubs  = new List<int>();
 
         foreach (var user in users)
         {
             if (!user.NextPayday.HasValue) continue;
             var result    = decisionService.DailyStatus(user.Balance, user.NextPayday.Value);
-            var isWeekend = DateTime.Now.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
             var (title, body) = (result.Status, isWeekend) switch
             {
                 ("SAFE",    true)  => ("SmartSpend", $"Weekends get expensive. Stay under ${result.SafePerDay:F0} today."),
